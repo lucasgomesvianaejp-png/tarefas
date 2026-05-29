@@ -5,8 +5,10 @@ HISTÓRICO IA
 [v2] Alterado por IA – integração Firebase/Firestore, persistência real, remoção do seed automático e conclusão diária de rotinas.
 [v3] Alterado por IA – diagnóstico de Firebase mais explícito no topo, status clicável com detalhe do erro e fallback local sem travar a tela.
 [v4] Alterado por IA – status visual discreto por bolinha, remoção do texto Firebase no topo.
-[v5] Alterado por IA – removido Assistente/IA externa; mantida análise nativa por algoritmo de prioridade, sem API de IA.
-[v6] Pendente – autenticação por usuário e separar dados por conta.
+[v5] Alterado por IA – removido Assistente/IA externa; mantido cálculo local de prioridade, sem API de IA.
+[v6] Alterado por IA – removida a caixa lateral de análise de prioridade; tela Hoje agora fica focada somente na fila e nos indicadores.
+[v7] Alterado por IA – correções de usabilidade: prioridade recalibrada, edição por clique no card, conclusão visual, navegação por dia nos calendários e remoção definitiva de qualquer painel lateral.
+[v7] Pendente – autenticação por usuário e separar dados por conta.
 -->
 <html lang="pt-BR">
 <head>
@@ -100,7 +102,7 @@ html,body{height:100%;overflow:hidden;font-family:'DM Sans',sans-serif;backgroun
 .tl-block .tt{font-size:8.5px;opacity:.65;margin-bottom:1px}
 .tl-block .tl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
 /* ── HOJE GRID ── */
-.hj-grid{display:grid;grid-template-columns:1fr 296px;gap:14px}
+.hj-grid{display:block}
 /* ── SECTION HDR ── */
 .sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
 .sec-title{font-size:12.5px;font-weight:500}
@@ -109,12 +111,14 @@ html,body{height:100%;overflow:hidden;font-family:'DM Sans',sans-serif;backgroun
 .tl2{display:flex;flex-direction:column;gap:6px}
 .tc{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:10px 12px;display:flex;align-items:flex-start;gap:9px;cursor:pointer;transition:.13s;position:relative}
 .tc:hover{border-color:var(--bd2);box-shadow:0 2px 7px rgba(0,0,0,.05);transform:translateY(-1px)}
-.tc.done{opacity:.42}
-.tc.done .tc-ttl{text-decoration:line-through}
+.tc.done{opacity:.68;background:var(--sf2)}
+.tc.done .tc-ttl{text-decoration:line-through;color:var(--tx2)}
+.tc.pulse{animation:donePulse .38s ease}
+@keyframes donePulse{0%{transform:scale(.985);box-shadow:0 0 0 rgba(0,0,0,0)}45%{transform:scale(1.01);box-shadow:0 4px 14px rgba(0,0,0,.10)}100%{transform:scale(1);box-shadow:0 0 0 rgba(0,0,0,0)}}
 .tc-bar{width:3px;border-radius:3px;align-self:stretch;min-height:16px;flex-shrink:0}
 .tc-chk{width:16px;height:16px;border:1.5px solid var(--bd2);border-radius:50%;flex-shrink:0;margin-top:1px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.13s}
 .tc-chk:hover{border-color:var(--acc,#2E4A3E)}
-.tc.done .tc-chk{background:var(--acc,#2E4A3E);border-color:var(--acc,#2E4A3E)}
+.tc.done .tc-chk{background:var(--acc,#2E4A3E);border-color:var(--acc,#2E4A3E);transform:scale(1.06)}
 .tc-dot{width:6px;height:6px;border-radius:50%;background:#fff;display:none}
 .tc.done .tc-dot{display:block}
 .tc-body{flex:1;min-width:0}
@@ -124,33 +128,13 @@ html,body{height:100%;overflow:hidden;font-family:'DM Sans',sans-serif;backgroun
 .tc-time{font-size:10px;color:var(--tx3)}
 .tc-score{font-size:10.5px;font-weight:500;color:var(--tx2);display:flex;align-items:center;gap:2px;flex-shrink:0;margin-top:1px}
 .sdot{width:5px;height:5px;border-radius:50%}
-.tc-actions{display:none;position:absolute;top:8px;right:8px;gap:4px}
-.tc:hover .tc-actions{display:flex}
-.tc-btn{background:var(--sf2);border:none;border-radius:5px;padding:3px 6px;font-size:10px;cursor:pointer;color:var(--tx2);transition:.12s}
-.tc-btn:hover{background:var(--sf3);color:var(--tx)}
+.tc-actions{display:flex;position:absolute;top:8px;right:8px;gap:4px}
+.tc-btn{background:var(--sf2);border:none;border-radius:5px;padding:4px 8px;font-size:10.5px;cursor:pointer;color:var(--tx2);transition:.12s}
+.tc:hover .tc-btn,.tc-btn:hover{background:var(--sf3);color:var(--tx)}
 /* ── TABS MINI ── */
 .tabs-mini{display:flex;gap:1px;background:var(--sf2);border-radius:6px;padding:3px;width:fit-content;margin-bottom:10px}
 .tmtab{padding:4px 10px;font-size:11.5px;color:var(--tx2);cursor:pointer;border-radius:4px;transition:.12s;user-select:none}
 .tmtab.active{background:var(--sf);color:var(--tx);box-shadow:0 1px 3px rgba(0,0,0,.06)}
-/* ── PRIORITY ANALYSIS PANEL ── */
-.prio-panel{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column;max-height:560px;min-height:320px}
-.prio-hdr{padding:11px 13px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:7px;background:var(--acc,#2E4A3E);color:#fff;transition:background .3s}
-.prio-hdr-title{font-size:12.5px;font-weight:500}
-.prio-badge{font-size:9px;background:rgba(255,255,255,.2);padding:2px 6px;border-radius:10px;margin-left:auto;text-transform:uppercase;letter-spacing:.4px}
-.prio-body{padding:11px;display:flex;flex-direction:column;gap:8px;overflow-y:auto}
-.prio-body::-webkit-scrollbar{width:3px}
-.prio-body::-webkit-scrollbar-thumb{background:var(--bd2)}
-.prio-card{background:var(--sf2);border:1px solid var(--bd);border-radius:var(--rs);padding:9px 10px}
-.prio-card.soft{background:var(--acc-l,#E8F0EC);color:var(--acc,#2E4A3E)}
-.prio-label{font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--tx3);margin-bottom:4px;font-weight:500}
-.prio-card.soft .prio-label{color:inherit;opacity:.62}
-.prio-title{font-size:12.5px;font-weight:500;line-height:1.35;margin-bottom:3px}
-.prio-desc{font-size:11px;color:var(--tx2);line-height:1.45}
-.prio-card.soft .prio-desc{color:inherit;opacity:.78}
-.prio-list{display:flex;flex-direction:column;gap:5px}
-.prio-row{display:flex;align-items:flex-start;gap:7px;font-size:11.5px;line-height:1.35;color:var(--tx2)}
-.prio-rank{width:18px;height:18px;border-radius:50%;background:var(--acc-l,#E8F0EC);color:var(--acc,#2E4A3E);display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:500;flex-shrink:0}
-.prio-empty{padding:18px;text-align:center;color:var(--tx3);font-size:12px}
 /* ── CALENDAR ── */
 .cal-nav{display:flex;align-items:center;gap:9px;margin-bottom:13px}
 .cn-btn{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rs);padding:5px 10px;cursor:pointer;font-size:13px;color:var(--tx);transition:.12s}
@@ -167,6 +151,8 @@ html,body{height:100%;overflow:hidden;font-family:'DM Sans',sans-serif;backgroun
 .cal-day.other-m .cal-dn{color:var(--tx3)}
 .cal-dn{font-size:11px;font-weight:500;margin-bottom:2px}
 .cal-day.today .cal-dn-inner{background:var(--acc,#2E4A3E);color:#fff;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px}
+.cal-day.selected{outline:2px solid var(--acc,#2E4A3E);outline-offset:-2px;background:var(--acc-l,#E8F0EC)}
+.ym-d.selected{outline:1.5px solid var(--acc,#2E4A3E);outline-offset:1px}
 .cal-pill{font-size:9px;padding:1px 4px;border-radius:3px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cal-more{font-size:8.5px;color:var(--tx3);padding:1px 3px}
 /* ── WEEK ── */
@@ -282,7 +268,6 @@ textarea.fi2{resize:vertical}
   .main{width:100%}
   .metrics{grid-template-columns:repeat(2,1fr)}
   .hj-grid{grid-template-columns:1fr}
-  .prio-panel{display:none}
   .vtabs{display:none}
   .yr-grid{grid-template-columns:repeat(2,1fr)}
   .topbar{padding:0 12px}
@@ -390,18 +375,6 @@ textarea.fi2{resize:vertical}
             <span class="sec-cnt" id="hoje-cnt">—</span>
           </div>
           <div class="tl2" id="today-list"></div>
-        </div>
-        <div>
-          <div class="prio-panel">
-            <div class="prio-hdr">
-              <span style="font-size:14px">◆</span>
-              <span class="prio-hdr-title">Análise de prioridade</span>
-              <span class="prio-badge">Algoritmo</span>
-            </div>
-            <div class="prio-body" id="prio-body">
-              <div class="prio-empty">A análise aparece quando houver tarefas para hoje.</div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -517,7 +490,7 @@ textarea.fi2{resize:vertical}
   <div class="frow">
     <div class="fg"><label class="fl">DATA</label><input type="date" class="fi2" id="t-date"></div>
     <div class="fg"><label class="fl">DURAÇÃO</label>
-      <select class="fi2" id="t-dur">
+      <select class="fi2" id="t-dur" onchange="updScore()">
         <option value="0.25">15 min</option><option value="0.5">30 min</option>
         <option value="1" selected>1 hora</option><option value="1.5">1h30</option>
         <option value="2">2 horas</option><option value="3">3 horas</option><option value="4">4+ horas</option>
@@ -536,7 +509,7 @@ textarea.fi2{resize:vertical}
     <div class="fhint">Recorrentes aparecem automaticamente em todos os calendários</div>
   </div>
   <div class="sl-box">
-    <div class="sl-box-title">Critérios de priorização inteligente</div>
+    <div class="sl-box-title">Critérios do algoritmo de prioridade</div>
     <div class="sg"><label>Impacto financeiro</label><input type="range" min="1" max="5" value="3" id="sl-fin" oninput="updScore()"><span class="sv" id="sv-fin">3</span></div>
     <div class="sg"><label>Urgência / custo do atraso</label><input type="range" min="1" max="5" value="3" id="sl-urg" oninput="updScore()"><span class="sv" id="sv-urg">3</span></div>
     <div class="sg"><label>Peso cognitivo</label><input type="range" min="1" max="5" value="3" id="sl-cog" oninput="updScore()"><span class="sv" id="sv-cog">3</span></div>
@@ -648,6 +621,7 @@ let state = baseState();
 
 const today = new Date();
 let navDate   = new Date(today);
+let selectedDate = new Date(today);
 let curView   = 'hoje';
 let activeNichoId = '__all__';
 let todayTab  = 'todas';
@@ -662,15 +636,25 @@ let profileNichoId = null;
 // ════════════════════════════
 // HELPERS
 // ════════════════════════════
-function iso(d){ return d.toISOString().split('T')[0] }
-function addDays(d,n){ const r=new Date(d);r.setDate(r.getDate()+n);return r }
+function iso(d){
+  const dt = d instanceof Date ? d : parseISODate(String(d));
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+}
+function parseISODate(s){
+  if(s instanceof Date) return new Date(s.getFullYear(), s.getMonth(), s.getDate());
+  const [y,m,d]=String(s||iso(today)).split('-').map(Number);
+  return new Date(y, (m||1)-1, d||1);
+}
+function addDays(d,n){ const r=parseISODate(d);r.setDate(r.getDate()+n);return r }
 function fmtFull(d){ return d.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) }
 function fmtShort(d){ return d.toLocaleDateString('pt-BR',{day:'numeric',month:'short'}) }
 function getNicho(id){ return state.nichos.find(n=>n.id===id)||{name:id,color:'#888',light:'#eee',icon:'◆'} }
 function lightColor(hex){ return hex+'22' }
 function calcScore(t){
-  const f=t.financeiro||3, u=t.urgencia||3, c=t.cognitivo||3, b=t.bloqueio||1, d=t.duracao||1;
-  return Math.min(100,Math.round((f/d)*18+u*13+b*8+(6-c)*5));
+  const f=Number(t.financeiro||3), u=Number(t.urgencia||3), c=Number(t.cognitivo||3), b=Number(t.bloqueio||1), d=Number(t.duracao||1);
+  const raw = ((f*0.35) + (u*0.35) + (b*0.20) + ((6-c)*0.10)) / 5 * 100;
+  const durFactor = d<=0.5 ? 1.05 : d<=1 ? 1 : d<=1.5 ? .95 : d<=2 ? .90 : d<=3 ? .85 : .80;
+  return Math.max(0, Math.min(100, Math.round(raw * durFactor)));
 }
 const PRI=[
   {min:80,lbl:'Crítica',color:'#8B2E2E',bg:'#F5EAEA',bar:'#C0392B'},
@@ -688,7 +672,7 @@ function priDesc(s){
 
 function expandTask(t,from,to){
   if(!t.recorrencia||t.recorrencia==='nenhuma') return t.date>=from&&t.date<=to?[{...t,vd:t.date,done:!!t.done}]:[];
-  const base=new Date(t.date||iso(today)), end=new Date(to), r=[], step={diaria:1,semanal:7,quinzenal:14,mensal:30}[t.recorrencia]||1;
+  const base=parseISODate(t.date||iso(today)), end=parseISODate(to), r=[], step={diaria:1,semanal:7,quinzenal:14,mensal:30}[t.recorrencia]||1;
   let cur=new Date(base);
   while(cur<=end){
     const curIso=iso(cur);
@@ -931,11 +915,11 @@ function seedDemo(){
 function tcHTML(t,rank){
   const n=getNicho(t.nichoId); const p=getPri(t.score);
   const rl=t.recorrencia&&t.recorrencia!=='nenhuma'?RECUR_LBL[t.recorrencia]:'';
-  const isDone=t.done&&(!t.recorrencia||t.recorrencia==='nenhuma');
+  const isDone=!!t.done;
   const baseId=String(t.id).split('_')[0];
-  return `<div class="tc ${isDone?'done':''}" id="tc-${t.id}">
+  return `<div class="tc ${isDone?'done':''}" id="tc-${t.id}" onclick="openTaskModal('${baseId}')" title="Clique para editar">
     <div class="tc-bar" style="background:${p.bar}"></div>
-    <div class="tc-chk" onclick="toggleTask('${t.id}',event)"><div class="tc-dot"></div></div>
+    <div class="tc-chk" onclick="toggleTask('${t.id}',event)" title="Concluir/reabrir"><div class="tc-dot"></div></div>
     <div class="tc-body">
       <div class="tc-ttl">${rank?rank+'. ':''}${t.title}</div>
       <div class="tc-meta">
@@ -943,14 +927,12 @@ function tcHTML(t,rank){
         <span class="badge" style="background:${p.bg};color:${p.color}">${p.lbl}</span>
         ${rl?`<span class="badge" style="background:#F0F0F0;color:#666">${rl}</span>`:''}
         ${t.objId?`<span class="badge" style="background:${lightColor('#2E4A3E')};color:#2E4A3E">▸ Obj</span>`:''}
-        <span class="tc-time">~${t.duracao<1?Math.round(t.duracao*60)+'min':t.duracao+'h'}</span>
+        <span class="tc-time">${t.vd?new Date(t.vd+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}):''} · ~${t.duracao<1?Math.round(t.duracao*60)+'min':t.duracao+'h'}</span>
       </div>
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
       <div class="tc-score"><div class="sdot" style="background:${p.bar}"></div>${t.score}</div>
-      <div style="display:flex;gap:3px">
-        <button class="tc-btn" onclick="openTaskModal(${baseId})" style="opacity:0;transition:.13s" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0">✎</button>
-      </div>
+      <button class="tc-btn" onclick="event.stopPropagation();openTaskModal('${baseId}')">Editar</button>
     </div>
   </div>`;
 }
@@ -964,7 +946,10 @@ function renderList(list,cid,ranked=false){
 // HOJE
 // ════════════════════════════
 function renderToday(){
-  const d=iso(today);
+  const d=iso(selectedDate);
+  const isSelectedToday=d===iso(today);
+  document.getElementById('tb-title').textContent=isSelectedToday?'Hoje':'Dia selecionado';
+  document.getElementById('tb-date').textContent=fmtFull(selectedDate);
   let list=getForDate(d);
   const all=list;
   if(todayTab==='pendentes') list=list.filter(t=>!t.done);
@@ -1000,8 +985,7 @@ function renderToday(){
     const b={label:t.title.substring(0,22)+(t.title.length>22?'…':''), time:`${Math.floor(hour)}:${String(Math.round((hour%1)*60)).padStart(2,'0')}–${Math.floor(end)}:${String(Math.round((end%1)*60)).padStart(2,'0')}`, color:n.color, light:lightColor(n.color), w:Math.max(85,t.duracao*75)};
     hour=end+0.5; return b;
   });
-  document.getElementById('tl-track').innerHTML=blocks.map(b=>`<div class="tl-block" style="background:${b.light};color:${b.color};min-width:${b.w}px"><div class="tt">${b.time}</div><div class="tl">${b.label}</div></div>`).join('');
-  renderPriorityAnalysis();
+  document.getElementById('tl-track').innerHTML=blocks.length?blocks.map(b=>`<div class="tl-block" style="background:${b.light};color:${b.color};min-width:${b.w}px"><div class="tt">${b.time}</div><div class="tl">${b.label}</div></div>`).join(''):'<div style="font-size:11px;color:var(--tx3);padding:14px 4px">Nenhum bloco pendente para este dia</div>';
 }
 
 // ════════════════════════════
@@ -1116,7 +1100,6 @@ function applyAccent(hex){
   document.documentElement.style.setProperty('--acc',hex);
   document.documentElement.style.setProperty('--acc-l',hex+'22');
   document.querySelector('.sb').style.background=hex;
-  const ph=document.querySelector('.prio-hdr'); if(ph) ph.style.background=hex;
 }
 
 function filterNicho(id, el){
@@ -1138,9 +1121,9 @@ function renderMonth(){
   for(let i=first-1;i>=0;i--) html+=`<div class="cal-day other-m"><div class="cal-dn">${pd-i}</div></div>`;
   for(let d=1;d<=dim;d++){
     const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const isT=ds===iso(today);
+    const isT=ds===iso(today), isSel=ds===iso(selectedDate);
     const dt=getForDate(ds).sort((a,b)=>b.score-a.score);
-    html+=`<div class="cal-day ${isT?'today':''}">
+    html+=`<div class="cal-day ${isT?'today':''} ${isSel?'selected':''}" onclick="openDay('${ds}')" title="Abrir ${d}/${m+1}/${y}">
       <div class="cal-dn">${isT?`<div class="cal-dn-inner">${d}</div>`:d}</div>
       ${dt.slice(0,2).map(t=>{const n=getNicho(t.nichoId);return`<div class="cal-pill" style="background:${lightColor(n.color)};color:${n.color}">${t.title.substring(0,17)}${t.title.length>17?'…':''}</div>`}).join('')}
       ${dt.length>2?`<div class="cal-more">+${dt.length-2}</div>`:''}
@@ -1158,13 +1141,13 @@ function renderWeek(){
   document.getElementById('wk-lbl').textContent=fmtShort(days[0])+' – '+fmtShort(days[6]);
   const wd=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
   let hdr='<div class="whc" style="background:var(--sf2)"></div>';
-  days.forEach((d,i)=>{const isT=iso(d)===iso(today);hdr+=`<div class="whc ${isT?'today':''}"><div class="wd">${wd[i]}</div><div class="wn">${d.getDate()}</div></div>`;});
+  days.forEach((d,i)=>{const ds=iso(d), isT=ds===iso(today), isSel=ds===iso(selectedDate);hdr+=`<div class="whc ${isT?'today':''} ${isSel?'today':''}" onclick="openDay('${ds}')" style="cursor:pointer"><div class="wd">${wd[i]}</div><div class="wn">${d.getDate()}</div></div>`;});
   document.getElementById('wk-hdr').innerHTML=hdr;
   const hours=[7,8,9,10,11,12,13,14,15,16,17,18];
   let body='<div class="wtime-col">'+hours.map(h=>`<div class="wts">${h}:00</div>`).join('')+'</div>';
   days.forEach(d=>{
     const ds=iso(d), dt=getForDate(ds);
-    body+=`<div class="wdcol">${hours.map(()=>'<div class="wdslot"></div>').join('')}${dt.map((t,i)=>{const n=getNicho(t.nichoId);const top=4+i*46;return`<div class="wev" style="top:${top}px;height:42px;background:${lightColor(n.color)};color:${n.color};border-left-color:${n.color}">${t.title.substring(0,18)}${t.title.length>18?'…':''}</div>`}).join('')}</div>`;
+    body+=`<div class="wdcol" onclick="openDay('${ds}')" style="cursor:pointer">${hours.map(()=>'<div class="wdslot"></div>').join('')}${dt.map((t,i)=>{const n=getNicho(t.nichoId);const top=4+i*46;return`<div class="wev" onclick="event.stopPropagation();openTaskModal('${String(t.id).split('_')[0]}')" style="top:${top}px;height:42px;background:${lightColor(n.color)};color:${n.color};border-left-color:${n.color}">${t.title.substring(0,18)}${t.title.length>18?'…':''}</div>`}).join('')}</div>`;
   });
   document.getElementById('wk-body').innerHTML=body;
 }
@@ -1183,8 +1166,8 @@ function renderYear(){
     for(let i=0;i<sd;i++) cells+='<div></div>';
     for(let d=1;d<=dim;d++){
       const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-      const isT=ds===iso(today), has=tmap[d]>0;
-      cells+=`<div class="ym-d ${isT?'today':has?'has':''}">${d}</div>`;
+      const isT=ds===iso(today), isSel=ds===iso(selectedDate), has=tmap[d]>0;
+      cells+=`<div class="ym-d ${isT?'today':has?'has':''} ${isSel?'selected':''}" onclick="openDay('${ds}')" title="Abrir ${d}/${m+1}/${y}">${d}</div>`;
     }
     html+=`<div class="ym-card"><div class="ym-hdr">${MN[m]}${tot?`<span>${tot}</span>`:''}</div><div class="ym-mini">${cells}</div></div>`;
   }
@@ -1212,6 +1195,8 @@ function toggleTask(vid, e){
     toast(t.done?'Tarefa concluída ✓':'Tarefa reaberta');
   }
   renderAll();
+  const card=document.getElementById('tc-'+raw);
+  if(card){ card.classList.add('pulse'); setTimeout(()=>card.classList.remove('pulse'),450); }
   scheduleSave();
 }
 
@@ -1222,22 +1207,31 @@ function setTodayTab(tab,el){
   renderToday();
 }
 
-function setView(v, sbEl){
+function setView(v, sbEl, keepSelected=false){
+  if(v==='hoje'&&!keepSelected) selectedDate=new Date(today);
   curView=v;
   document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));
   document.querySelectorAll('.vt').forEach(e=>e.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
   const vt=document.getElementById('vt-'+v);
   if(vt) vt.classList.add('active');
-  const T={hoje:'Hoje',semana:'Semana',mes:'Mês',ano:'Ano',objetivos:'Objetivos',tarefas:'Tarefas','nicho-profile':getNicho(profileNichoId)?.name||'Nicho'};
+  const T={hoje:(iso(selectedDate)===iso(today)?'Hoje':'Dia selecionado'),semana:'Semana',mes:'Mês',ano:'Ano',objetivos:'Objetivos',tarefas:'Tarefas','nicho-profile':getNicho(profileNichoId)?.name||'Nicho'};
   document.getElementById('tb-title').textContent=T[v]||v;
+  document.getElementById('tb-date').textContent=(v==='hoje')?fmtFull(selectedDate):fmtFull(today);
   closeSidebar();
+}
+
+function openDay(ds){
+  selectedDate=parseISODate(ds);
+  navDate=parseISODate(ds);
+  setView('hoje', null, true);
+  renderAll();
 }
 
 function navMonth(d){navDate.setMonth(navDate.getMonth()+d);renderMonth()}
 function navWeek(d){navDate.setDate(navDate.getDate()+d*7);renderWeek()}
 function navYear(d){navDate.setFullYear(navDate.getFullYear()+d);renderYear()}
-function goToday(){navDate=new Date(today);renderAll()}
+function goToday(){navDate=new Date(today);selectedDate=new Date(today);renderAll();setView('hoje', null, true)}
 
 // ════════════════════════════
 // MODAL: TASK
@@ -1252,7 +1246,7 @@ function updScore(){
   const c=+document.getElementById('sl-cog').value, b=+document.getElementById('sl-dep').value;
   const d=+document.getElementById('t-dur').value||1;
   ['fin','urg','cog','dep'].forEach(k=>document.getElementById('sv-'+k).textContent=document.getElementById('sl-'+k).value);
-  const s=Math.min(100,Math.round((f/d)*18+u*13+b*8+(6-c)*5));
+  const s=calcScore({financeiro:f,urgencia:u,cognitivo:c,bloqueio:b,duracao:d});
   const p=getPri(s);
   document.getElementById('sp-num').textContent=s;
   document.getElementById('sp-num').style.color=p.color;
@@ -1286,7 +1280,15 @@ function openTaskModal(id){
     }
   } else {
     document.getElementById('t-title').value='';
-    document.getElementById('t-date').value=iso(today);
+    document.getElementById('t-date').value=iso(selectedDate);
+    document.getElementById('t-dur').value='1';
+    document.getElementById('sl-fin').value=3;
+    document.getElementById('sl-urg').value=3;
+    document.getElementById('sl-cog').value=3;
+    document.getElementById('sl-dep').value=1;
+    const nichoSel=document.getElementById('t-nicho');
+    if(nichoSel&&activeNichoId!=='__all__') nichoSel.value=activeNichoId;
+    document.getElementById('t-obj').value='';
     document.querySelectorAll('.ro').forEach(e=>e.classList.toggle('active',e.dataset.val==='nenhuma'));
     document.getElementById('modal-task-title').textContent='Nova tarefa';
     document.getElementById('modal-save-btn').textContent='Salvar tarefa';
@@ -1458,71 +1460,6 @@ function closeSidebar(){
 
 
 // ════════════════════════════
-// PRIORITY ANALYSIS — ALGORITMO NATIVO
-// ════════════════════════════
-function escHTML(s){
-  return String(s||'').replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));
-}
-
-function priorityReason(t){
-  const parts=[];
-  if((t.financeiro||0)>=4) parts.push('alto impacto financeiro');
-  if((t.urgencia||0)>=4) parts.push('urgência alta');
-  if((t.bloqueio||0)>=4) parts.push('desbloqueia outras tarefas');
-  if((t.cognitivo||0)>=4) parts.push('exige foco pesado');
-  if((t.duracao||0)<=0.5) parts.push('rápida de executar');
-  return parts.length?parts.join(' + '):'prioridade equilibrada pelos critérios cadastrados';
-}
-
-function renderPriorityAnalysis(){
-  const box=document.getElementById('prio-body');
-  if(!box) return;
-  const list=getForDate(iso(today));
-  const pend=list.filter(t=>!t.done).sort((a,b)=>b.score-a.score);
-  if(!pend.length){
-    box.innerHTML='<div class="prio-empty">Nenhuma tarefa pendente para hoje. Seu dia está limpo.</div>';
-    return;
-  }
-  const top=pend[0];
-  const quick=pend.filter(t=>(t.duracao||0)<=1).sort((a,b)=>b.score-a.score)[0]||top;
-  const light=pend.filter(t=>(t.cognitivo||3)<=2).sort((a,b)=>b.score-a.score)[0]||quick;
-  const critical=pend.filter(t=>t.score>=80).length;
-  const totalH=pend.reduce((s,t)=>s+(Number(t.duracao)||0),0);
-  const topRows=pend.slice(0,4).map((t,i)=>{
-    const n=getNicho(t.nichoId), p=getPri(t.score);
-    return `<div class="prio-row"><span class="prio-rank">${i+1}</span><div><strong style="color:${p.color}">${t.score}</strong> · ${escHTML(t.title)}<br><span style="font-size:10px;color:var(--tx3)">${escHTML(n.name)} · ${escHTML(priorityReason(t))}</span></div></div>`;
-  }).join('');
-  box.innerHTML=`
-    <div class="prio-card soft">
-      <div class="prio-label">Prioridade principal</div>
-      <div class="prio-title">${escHTML(top.title)}</div>
-      <div class="prio-desc">Score ${top.score} · ${escHTML(priorityReason(top))}.</div>
-    </div>
-    <div class="prio-card">
-      <div class="prio-label">Se tiver até 1 hora</div>
-      <div class="prio-title">${escHTML(quick.title)}</div>
-      <div class="prio-desc">Melhor equilíbrio entre prioridade e tempo curto.</div>
-    </div>
-    <div class="prio-card">
-      <div class="prio-label">Baixa energia</div>
-      <div class="prio-title">${escHTML(light.title)}</div>
-      <div class="prio-desc">Opção com menor peso cognitivo entre as tarefas úteis.</div>
-    </div>
-    <div class="prio-card">
-      <div class="prio-label">Resumo do dia</div>
-      <div class="prio-desc">${pend.length} pendentes · ${critical} críticas · ${totalH.toFixed(1).replace('.0','')}h estimadas.</div>
-    </div>
-    <div class="prio-card">
-      <div class="prio-label">Fila calculada</div>
-      <div class="prio-list">${topRows}</div>
-    </div>
-    <div class="prio-card">
-      <div class="prio-label">Como o algoritmo calcula</div>
-      <div class="prio-desc">Impacto financeiro, urgência, bloqueio, peso cognitivo e duração. Não usa API externa.</div>
-    </div>`;
-}
-
-// ════════════════════════════
 // TOAST
 // ════════════════════════════
 let toastT;
@@ -1553,7 +1490,7 @@ async function initApp(){
     setSyncStatus('Erro de conexão — app local', String(ev.reason?.stack||ev.reason||'Promise rejeitada'), 'err');
   });
 
-  document.getElementById('tb-date').textContent=fmtFull(today);
+  document.getElementById('tb-date').textContent=fmtFull(selectedDate);
   document.getElementById('n-name').addEventListener('input',updNichoPreview);
 
   // Renderização imediata: evita tela branca no Vercel mesmo se Firebase/CDN/Firestore falhar.
