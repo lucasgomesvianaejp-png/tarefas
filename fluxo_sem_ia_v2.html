@@ -1,0 +1,1477 @@
+<!DOCTYPE html>
+<!--
+HISTÓRICO IA
+[v1] Criado por IA – estrutura inicial do planejador Fluxo em HTML único.
+[v2] Alterado por IA – integração Firebase/Firestore, persistência real, remoção do seed automático e conclusão diária de rotinas.
+[v3] Alterado por IA – diagnóstico de Firebase mais explícito no topo, status clicável com detalhe do erro e fallback local sem travar a tela.
+[v4] Alterado por IA – status visual discreto por bolinha, remoção do texto Firebase no topo.
+[v5] Alterado por IA – removido Assistente/IA externa; mantido cálculo local de prioridade, sem API de IA.
+[v6] Alterado por IA – removida a caixa lateral de análise de prioridade; tela Hoje agora fica focada somente na fila e nos indicadores.
+[v7] Pendente – autenticação por usuário e separar dados por conta.
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2E4A3E">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fluxo">
+<title>Fluxo — Planejador</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F4F2ED;--sf:#FFF;--sf2:#EDEAE3;--sf3:#E5E2DB;
+  --tx:#1A1917;--tx2:#6B6860;--tx3:#A09D97;
+  --bd:rgba(26,25,23,.08);--bd2:rgba(26,25,23,.16);
+  --r:10px;--rs:7px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);font-size:14px}
+/* ── LAYOUT ── */
+.app{display:flex;height:100vh;height:100dvh}
+/* ── SIDEBAR ── */
+.sb{width:230px;min-width:230px;background:var(--acc,#2E4A3E);display:flex;flex-direction:column;overflow:hidden;transition:background .3s}
+.sb-logo{padding:18px 16px 14px;border-bottom:1px solid rgba(255,255,255,.09)}
+.sb-logo h1{font-family:'DM Serif Display',serif;font-size:20px;color:#fff;font-weight:400}
+.sb-logo small{font-size:9.5px;color:rgba(255,255,255,.4);letter-spacing:1.1px;text-transform:uppercase}
+.sb-nav{flex:1;overflow-y:auto;padding:8px 0}
+.sb-nav::-webkit-scrollbar{width:0}
+.sb-sec{font-size:9px;font-weight:500;letter-spacing:1.3px;text-transform:uppercase;color:rgba(255,255,255,.3);padding:11px 16px 4px}
+.sb-item{display:flex;align-items:center;gap:8px;padding:8px 16px;cursor:pointer;color:rgba(255,255,255,.6);font-size:13px;border-left:2px solid transparent;transition:.13s;user-select:none}
+.sb-item:hover{background:rgba(255,255,255,.07);color:#fff}
+.sb-item.active{background:rgba(255,255,255,.12);color:#fff;border-left-color:rgba(255,255,255,.65)}
+.sb-badge{font-size:9.5px;background:rgba(255,255,255,.14);padding:1px 6px;border-radius:10px;margin-left:auto}
+/* nicho row */
+.nicho-row{display:flex;align-items:center;gap:8px;padding:7px 16px;cursor:pointer;color:rgba(255,255,255,.6);font-size:13px;border-left:2px solid transparent;transition:.13s;user-select:none}
+.nicho-row:hover{background:rgba(255,255,255,.07);color:#fff}
+.nicho-row.active{background:rgba(255,255,255,.12);color:#fff;border-left-color:rgba(255,255,255,.65)}
+.nicho-row .nd{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.nicho-row .ne{margin-left:auto;opacity:0;transition:.13s;font-size:11px}
+.nicho-row:hover .ne{opacity:1}
+.nicho-add{display:flex;align-items:center;gap:7px;padding:6px 16px 10px;cursor:pointer;color:rgba(255,255,255,.35);font-size:12px;transition:.13s}
+.nicho-add:hover{color:rgba(255,255,255,.7)}
+.sb-bottom{padding:12px 14px;border-top:1px solid rgba(255,255,255,.09)}
+.sb-score{background:rgba(255,255,255,.09);border-radius:var(--rs);padding:11px 12px}
+.sb-score .lbl{font-size:9px;letter-spacing:.9px;text-transform:uppercase;color:rgba(255,255,255,.38)}
+.sb-score .val{font-family:'DM Serif Display',serif;font-size:28px;color:#fff;line-height:1.1;margin:1px 0}
+.sb-score .sub{font-size:10.5px;color:rgba(255,255,255,.42)}
+.bar-track{height:3px;background:rgba(255,255,255,.14);border-radius:3px;margin-top:8px;overflow:hidden}
+.bar-fill{height:100%;background:rgba(255,255,255,.72);border-radius:3px;transition:.4s}
+/* ── MAIN ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.topbar{background:var(--sf);border-bottom:1px solid var(--bd);padding:0 18px;display:flex;align-items:center;gap:10px;height:50px;flex-shrink:0}
+.tb-title{font-family:'DM Serif Display',serif;font-size:16px;font-weight:400}
+.tb-date{font-size:11px;color:var(--tx3)}
+.sync-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:0 0 8px;background:#A09D97;opacity:.9;box-shadow:0 0 0 3px rgba(0,0,0,.035);cursor:help;margin-left:2px}
+.sync-dot.ok{background:#1A6B4A;box-shadow:0 0 0 3px rgba(26,107,74,.10)}
+.sync-dot.warn{background:#C49A3A;box-shadow:0 0 0 3px rgba(196,154,58,.11)}
+.sync-dot.err{background:#C0392B;box-shadow:0 0 0 3px rgba(192,57,43,.10)}
+.spacer{flex:1}
+.vtabs{display:flex;gap:1px;background:var(--sf2);border-radius:var(--rs);padding:3px}
+.vt{padding:4px 10px;font-size:11.5px;color:var(--tx2);cursor:pointer;border-radius:5px;transition:.12s;white-space:nowrap;user-select:none}
+.vt:hover{color:var(--tx)}
+.vt.active{background:var(--sf);color:var(--tx);box-shadow:0 1px 4px rgba(0,0,0,.07)}
+.btn-add{display:flex;align-items:center;gap:5px;background:var(--acc,#2E4A3E);color:#fff;border:none;border-radius:var(--rs);padding:6px 12px;font-size:12.5px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:.13s;white-space:nowrap}
+.btn-add:hover{opacity:.88}
+/* ── CONTENT ── */
+.content{flex:1;overflow-y:auto;overflow-x:hidden;padding:16px 18px}
+.content::-webkit-scrollbar{width:4px}
+.content::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:4px}
+/* ── VIEWS ── */
+.view{display:none}
+.view.active{display:block}
+@keyframes fs{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+.view.active>*{animation:fs .16s ease}
+/* ── METRICS ── */
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:14px}
+.mc{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:12px 14px;border-left:3px solid transparent}
+.mc .ml{font-size:9.5px;color:var(--tx3);letter-spacing:.4px;margin-bottom:2px}
+.mc .mv{font-family:'DM Serif Display',serif;font-size:23px;line-height:1}
+.mc .ms{font-size:10.5px;color:var(--tx2);margin-top:2px}
+/* ── TIMELINE ── */
+.timeline{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:12px 14px;margin-bottom:14px}
+.tl-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+.tl-title{font-size:12px;font-weight:500}
+.tl-track{display:flex;gap:6px;height:46px;overflow-x:auto}
+.tl-track::-webkit-scrollbar{height:0}
+.tl-block{border-radius:6px;display:flex;flex-direction:column;justify-content:center;padding:0 10px;font-size:9.5px;font-weight:500;flex-shrink:0;cursor:default}
+.tl-block .tt{font-size:8.5px;opacity:.65;margin-bottom:1px}
+.tl-block .tl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
+/* ── HOJE GRID ── */
+.hj-grid{display:block}
+/* ── SECTION HDR ── */
+.sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+.sec-title{font-size:12.5px;font-weight:500}
+.sec-cnt{font-size:10px;color:var(--tx3);background:var(--sf2);padding:2px 8px;border-radius:12px}
+/* ── TASK CARDS ── */
+.tl2{display:flex;flex-direction:column;gap:6px}
+.tc{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:10px 12px;display:flex;align-items:flex-start;gap:9px;cursor:pointer;transition:.13s;position:relative}
+.tc:hover{border-color:var(--bd2);box-shadow:0 2px 7px rgba(0,0,0,.05);transform:translateY(-1px)}
+.tc.done{opacity:.42}
+.tc.done .tc-ttl{text-decoration:line-through}
+.tc-bar{width:3px;border-radius:3px;align-self:stretch;min-height:16px;flex-shrink:0}
+.tc-chk{width:16px;height:16px;border:1.5px solid var(--bd2);border-radius:50%;flex-shrink:0;margin-top:1px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.13s}
+.tc-chk:hover{border-color:var(--acc,#2E4A3E)}
+.tc.done .tc-chk{background:var(--acc,#2E4A3E);border-color:var(--acc,#2E4A3E)}
+.tc-dot{width:6px;height:6px;border-radius:50%;background:#fff;display:none}
+.tc.done .tc-dot{display:block}
+.tc-body{flex:1;min-width:0}
+.tc-ttl{font-size:12.5px;color:var(--tx);margin-bottom:4px;line-height:1.35}
+.tc-meta{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.badge{font-size:9.5px;font-weight:500;padding:2px 6px;border-radius:10px;white-space:nowrap}
+.tc-time{font-size:10px;color:var(--tx3)}
+.tc-score{font-size:10.5px;font-weight:500;color:var(--tx2);display:flex;align-items:center;gap:2px;flex-shrink:0;margin-top:1px}
+.sdot{width:5px;height:5px;border-radius:50%}
+.tc-actions{display:none;position:absolute;top:8px;right:8px;gap:4px}
+.tc:hover .tc-actions{display:flex}
+.tc-btn{background:var(--sf2);border:none;border-radius:5px;padding:3px 6px;font-size:10px;cursor:pointer;color:var(--tx2);transition:.12s}
+.tc-btn:hover{background:var(--sf3);color:var(--tx)}
+/* ── TABS MINI ── */
+.tabs-mini{display:flex;gap:1px;background:var(--sf2);border-radius:6px;padding:3px;width:fit-content;margin-bottom:10px}
+.tmtab{padding:4px 10px;font-size:11.5px;color:var(--tx2);cursor:pointer;border-radius:4px;transition:.12s;user-select:none}
+.tmtab.active{background:var(--sf);color:var(--tx);box-shadow:0 1px 3px rgba(0,0,0,.06)}
+/* ── CALENDAR ── */
+.cal-nav{display:flex;align-items:center;gap:9px;margin-bottom:13px}
+.cn-btn{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rs);padding:5px 10px;cursor:pointer;font-size:13px;color:var(--tx);transition:.12s}
+.cn-btn:hover{background:var(--sf2)}
+.cal-lbl{font-family:'DM Serif Display',serif;font-size:16px;text-transform:capitalize}
+.cal-grid{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden}
+.cal-hdr{display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--bd)}
+.cal-hdr div{padding:8px;text-align:center;font-size:10px;font-weight:500;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px}
+.cal-days{display:grid;grid-template-columns:repeat(7,1fr)}
+.cal-day{border-right:1px solid var(--bd);border-bottom:1px solid var(--bd);padding:6px;min-height:74px;cursor:pointer;transition:background .12s}
+.cal-day:nth-child(7n){border-right:none}
+.cal-day:hover{background:var(--sf2)}
+.cal-day.today{background:var(--acc-l,#E8F0EC)}
+.cal-day.other-m .cal-dn{color:var(--tx3)}
+.cal-dn{font-size:11px;font-weight:500;margin-bottom:2px}
+.cal-day.today .cal-dn-inner{background:var(--acc,#2E4A3E);color:#fff;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px}
+.cal-pill{font-size:9px;padding:1px 4px;border-radius:3px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-more{font-size:8.5px;color:var(--tx3);padding:1px 3px}
+/* ── WEEK ── */
+.wk-wrap{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden}
+.wk-hdr{display:grid;grid-template-columns:50px repeat(7,1fr);border-bottom:1px solid var(--bd)}
+.whc{padding:8px 5px;text-align:center;border-right:1px solid var(--bd);font-size:11px}
+.whc .wd{font-size:9.5px;color:var(--tx2);text-transform:uppercase;letter-spacing:.3px}
+.whc .wn{font-size:16px;font-family:'DM Serif Display',serif;color:var(--tx)}
+.whc.today{background:var(--acc-l,#E8F0EC)}
+.whc.today .wn{color:var(--acc,#2E4A3E)}
+.wk-body{display:grid;grid-template-columns:50px repeat(7,1fr);max-height:500px;overflow-y:auto}
+.wk-body::-webkit-scrollbar{width:3px}
+.wk-body::-webkit-scrollbar-thumb{background:var(--bd2)}
+.wtime-col{border-right:1px solid var(--bd)}
+.wts{height:42px;border-bottom:1px solid var(--bd);padding:3px 5px;font-size:9px;color:var(--tx3);display:flex;align-items:flex-start}
+.wdcol{border-right:1px solid var(--bd);position:relative;overflow:hidden}
+.wdslot{height:42px;border-bottom:1px solid var(--bd)}
+.wev{position:absolute;left:2px;right:2px;border-radius:4px;padding:2px 5px;font-size:9px;font-weight:500;overflow:hidden;cursor:pointer;z-index:1;border-left:2px solid}
+/* ── YEAR ── */
+.yr-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.ym-card{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);overflow:hidden}
+.ym-hdr{background:var(--sf2);padding:7px 10px;font-size:11px;font-weight:500;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center}
+.ym-hdr span{font-size:9.5px;color:var(--tx3)}
+.ym-mini{display:grid;grid-template-columns:repeat(7,1fr);padding:5px 7px;gap:1px}
+.ym-d{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--tx3);border-radius:50%;cursor:pointer}
+.ym-d:hover{background:var(--sf2)}
+.ym-d.has{color:var(--tx);font-weight:500}
+.ym-d.today{background:var(--acc,#2E4A3E);color:#fff}
+/* ── OBJECTIVES ── */
+.obj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(295px,1fr));gap:13px}
+.obj-card{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:14px;cursor:pointer;transition:.13s}
+.obj-card:hover{border-color:var(--bd2);box-shadow:0 2px 10px rgba(0,0,0,.06);transform:translateY(-1px)}
+.obj-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:5px}
+.obj-title{font-size:13px;font-weight:500;margin-bottom:2px;line-height:1.3}
+.obj-sub{font-size:11px;color:var(--tx2);line-height:1.4}
+.obj-actions{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:.13s}
+.obj-card:hover .obj-actions{opacity:1}
+.obj-btn{background:var(--sf2);border:none;border-radius:5px;padding:3px 7px;font-size:10px;cursor:pointer;color:var(--tx2);transition:.12s}
+.obj-btn:hover{background:var(--sf3);color:var(--tx)}
+.obj-prog{height:3px;background:var(--sf2);border-radius:3px;margin:9px 0;overflow:hidden}
+.obj-prog-fill{height:100%;border-radius:3px;transition:.3s}
+.obj-stats{display:flex;gap:13px}
+.obj-stat{font-size:10px;color:var(--tx3)}
+.obj-stat strong{color:var(--tx);font-size:12px;display:block;font-weight:500}
+.obj-tp{margin-top:9px;border-top:1px solid var(--bd);padding-top:8px;display:flex;flex-direction:column;gap:3px}
+.otp-item{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--tx2)}
+.otp-item.done{color:var(--tx3);text-decoration:line-through}
+.otp-chk{width:11px;height:11px;border:1px solid var(--bd2);border-radius:50%;flex-shrink:0}
+.otp-chk.done{background:var(--acc,#2E4A3E);border-color:var(--acc,#2E4A3E)}
+/* ── NICHO PROFILE ── */
+#nicho-profile{display:none}
+.np-hero{border-radius:var(--r);padding:20px;margin-bottom:14px;display:flex;align-items:center;gap:14px;color:#fff}
+.np-icon{font-size:28px;width:48px;height:48px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.15);border-radius:50%}
+.np-name{font-family:'DM Serif Display',serif;font-size:22px}
+.np-meta{font-size:12px;opacity:.8;margin-top:2px}
+.np-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:14px}
+/* ── ALL TASKS ── */
+.filter-bar{display:flex;gap:7px;margin-bottom:13px;flex-wrap:wrap;align-items:center}
+.fi{border:1px solid var(--bd);border-radius:var(--rs);padding:7px 10px;font-size:12.5px;font-family:'DM Sans',sans-serif;color:var(--tx);background:var(--sf);outline:none;transition:.13s}
+.fi:focus{border-color:var(--acc,#2E4A3E)}
+/* ── MODAL ── */
+.modal-ov{position:fixed;inset:0;background:rgba(10,10,8,.48);display:flex;align-items:center;justify-content:center;z-index:300;opacity:0;pointer-events:none;transition:opacity .18s;padding:16px}
+.modal-ov.open{opacity:1;pointer-events:all}
+.modal{background:var(--sf);border-radius:var(--r);padding:20px 22px;width:540px;max-width:100%;max-height:90dvh;overflow-y:auto;transform:translateY(8px);transition:transform .18s;box-shadow:0 14px 44px rgba(0,0,0,.14)}
+.modal-ov.open .modal{transform:none}
+.modal::-webkit-scrollbar{width:4px}
+.modal::-webkit-scrollbar-thumb{background:var(--bd2)}
+.mhdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.mtitle{font-family:'DM Serif Display',serif;font-size:17px}
+.mclose{background:none;border:none;font-size:15px;cursor:pointer;color:var(--tx2);padding:4px 6px;border-radius:4px;line-height:1;transition:.12s}
+.mclose:hover{background:var(--sf2);color:var(--tx)}
+.fg{margin-bottom:12px}
+.fl{display:block;font-size:10.5px;font-weight:500;color:var(--tx2);margin-bottom:4px;letter-spacing:.3px}
+.fi2{width:100%;border:1px solid var(--bd);border-radius:var(--rs);padding:8px 10px;font-size:13px;font-family:'DM Sans',sans-serif;color:var(--tx);background:var(--bg);outline:none;transition:.13s}
+.fi2:focus{border-color:var(--acc,#2E4A3E)}
+textarea.fi2{resize:vertical}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fhint{font-size:10px;color:var(--tx3);margin-top:3px}
+.sl-box{background:var(--sf2);border-radius:var(--rs);padding:12px;margin-bottom:12px}
+.sl-box-title{font-size:10.5px;font-weight:500;color:var(--tx2);margin-bottom:10px;letter-spacing:.3px;text-transform:uppercase}
+.sg{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.sg:last-child{margin-bottom:0}
+.sg label{font-size:11.5px;color:var(--tx);width:155px;flex-shrink:0}
+.sg input[type=range]{flex:1;accent-color:var(--acc,#2E4A3E);height:3px}
+.sv{font-size:12px;font-weight:500;color:var(--acc,#2E4A3E);min-width:18px;text-align:right}
+.score-prev{border-radius:var(--rs);padding:11px 13px;margin-bottom:12px;display:flex;align-items:center;gap:11px;transition:.2s}
+.sp-num{font-family:'DM Serif Display',serif;font-size:32px;line-height:1}
+.sp-label{font-size:12.5px;font-weight:500}
+.sp-desc{font-size:10.5px;color:var(--tx2);margin-top:2px}
+.btn-row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid var(--bd)}
+.btn-sec{background:none;border:1px solid var(--bd2);border-radius:var(--rs);padding:8px 14px;font-size:12.5px;font-family:'DM Sans',sans-serif;cursor:pointer;color:var(--tx);transition:.12s}
+.btn-sec:hover{background:var(--sf2)}
+.btn-pri{background:var(--acc,#2E4A3E);border:none;border-radius:var(--rs);padding:8px 17px;font-size:12.5px;font-family:'DM Sans',sans-serif;color:#fff;cursor:pointer;transition:.12s}
+.btn-pri:hover{opacity:.87}
+.btn-danger{background:#C0392B;border:none;border-radius:var(--rs);padding:8px 14px;font-size:12.5px;font-family:'DM Sans',sans-serif;color:#fff;cursor:pointer;transition:.12s}
+.btn-danger:hover{opacity:.87}
+.recur-opts{display:flex;gap:6px;flex-wrap:wrap}
+.ro{padding:5px 11px;border:1px solid var(--bd);border-radius:18px;font-size:11.5px;cursor:pointer;transition:.12s;color:var(--tx2);user-select:none}
+.ro.active{background:var(--acc-l,#E8F0EC);border-color:var(--acc,#2E4A3E);color:var(--acc,#2E4A3E);font-weight:500}
+/* ── NICHO MODAL ── */
+.color-picker{display:flex;gap:7px;flex-wrap:wrap}
+.color-opt{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:.12s;flex-shrink:0}
+.color-opt.active{border-color:var(--tx);transform:scale(1.1)}
+.icon-picker{display:flex;gap:6px;flex-wrap:wrap}
+.icon-opt{width:34px;height:34px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;border:1.5px solid var(--bd);background:var(--sf2);transition:.12s}
+.icon-opt.active{border-color:var(--acc,#2E4A3E);background:var(--acc-l,#E8F0EC)}
+/* ── EMPTY ── */
+.empty{padding:24px;text-align:center;color:var(--tx3);font-size:12.5px}
+/* ── MOBILE ── */
+@media(max-width:700px){
+  .sb{position:fixed;left:-230px;top:0;bottom:0;z-index:200;transition:left .22s}
+  .sb.open{left:0;box-shadow:4px 0 24px rgba(0,0,0,.18)}
+  .main{width:100%}
+  .metrics{grid-template-columns:repeat(2,1fr)}
+  .hj-grid{grid-template-columns:1fr}
+  .vtabs{display:none}
+  .yr-grid{grid-template-columns:repeat(2,1fr)}
+  .topbar{padding:0 12px}
+  .content{padding:12px 12px}
+  .hamburger{display:flex !important}
+  .btn-add-mob{display:flex !important}
+}
+.hamburger{display:none;background:none;border:none;cursor:pointer;padding:4px;border-radius:5px;color:var(--tx2);flex-direction:column;gap:4px}
+.hamburger span{display:block;width:18px;height:1.5px;background:currentColor;border-radius:2px}
+.btn-add-mob{display:none}
+.mob-overlay{display:none;position:fixed;inset:0;z-index:190;background:transparent}
+.mob-overlay.open{display:block}
+/* ── TOAST ── */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);background:#1A1917;color:#fff;padding:10px 18px;border-radius:20px;font-size:12.5px;z-index:999;transition:transform .25s,opacity .25s;opacity:0}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+/* ── FAB ── */
+.fab{display:none;position:fixed;bottom:20px;right:20px;width:52px;height:52px;border-radius:50%;background:var(--acc,#2E4A3E);color:#fff;border:none;font-size:22px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.22);z-index:100;align-items:center;justify-content:center;transition:.13s}
+.fab:active{transform:scale(.94)}
+@media(max-width:700px){.fab{display:flex}}
+</style>
+</head>
+<body>
+
+<div class="mob-overlay" id="mob-overlay" onclick="closeSidebar()"></div>
+<div class="toast" id="toast"></div>
+<button class="fab" onclick="openTaskModal()">+</button>
+
+<div class="app">
+<!-- ── SIDEBAR ── -->
+<div class="sb" id="sidebar">
+  <div class="sb-logo">
+    <h1>Fluxo</h1>
+    <small id="sb-user-label">Planejador inteligente</small>
+  </div>
+  <div class="sb-nav" id="sb-nav">
+    <div class="sb-sec">Visões</div>
+    <div class="sb-item active" onclick="setView('hoje',this)"><span>◈</span> Hoje</div>
+    <div class="sb-item" onclick="setView('semana',this)"><span>▦</span> Semana</div>
+    <div class="sb-item" onclick="setView('mes',this)"><span>▤</span> Mês</div>
+    <div class="sb-item" onclick="setView('ano',this)"><span>◻</span> Ano</div>
+    <div class="sb-item" onclick="setView('objetivos',this)"><span>◎</span> Objetivos <span class="sb-badge" id="sb-obj-cnt">0</span></div>
+    <div class="sb-item" onclick="setView('tarefas',this)"><span>≡</span> Tarefas <span class="sb-badge" id="sb-task-cnt">0</span></div>
+    <div class="sb-sec" style="margin-top:5px">Nichos <span style="opacity:.5;font-size:8px;letter-spacing:0;text-transform:none;margin-left:4px">clique para filtrar</span></div>
+    <div class="nicho-row active" id="ni-all" onclick="filterNicho('__all__',this)">
+      <span class="nd" style="background:#888"></span> Todos
+    </div>
+    <div id="nicho-list"></div>
+    <div class="nicho-add" onclick="openNichoModal()">+ Adicionar nicho</div>
+  </div>
+  <div class="sb-bottom">
+    <div class="sb-score">
+      <div class="lbl">Progresso do dia</div>
+      <div class="val" id="sb-score">—</div>
+      <div class="sub" id="sb-sub">carregando…</div>
+      <div class="bar-track"><div class="bar-fill" id="sb-bar" style="width:0%"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── MAIN ── -->
+<div class="main">
+  <div class="topbar">
+    <button class="hamburger" onclick="toggleSidebar()"><span></span><span></span><span></span></button>
+    <span class="tb-title" id="tb-title">Hoje</span>
+    <span class="tb-date" id="tb-date"></span>
+    <span class="sync-dot warn" id="sync-status" onclick="showSyncDetail()" title="Sincronizando" aria-label="Sincronizando"></span>
+    <div class="spacer"></div>
+    <div class="vtabs" id="vtabs">
+      <div class="vt active" id="vt-hoje" onclick="setView('hoje')">Hoje</div>
+      <div class="vt" id="vt-semana" onclick="setView('semana')">Semana</div>
+      <div class="vt" id="vt-mes" onclick="setView('mes')">Mês</div>
+      <div class="vt" id="vt-ano" onclick="setView('ano')">Ano</div>
+      <div class="vt" id="vt-objetivos" onclick="setView('objetivos')">Objetivos</div>
+      <div class="vt" id="vt-tarefas" onclick="setView('tarefas')">Tarefas</div>
+    </div>
+    <button class="btn-add btn-add-mob" onclick="openTaskModal()">+</button>
+    <button class="btn-add" style="display:none" id="topbar-add-btn" onclick="openTaskModal()">+ Nova tarefa</button>
+    <button class="btn-add" onclick="openTaskModal()">+ Nova tarefa</button>
+  </div>
+
+  <div class="content" id="main-content">
+
+    <!-- VIEW: HOJE -->
+    <div class="view active" id="view-hoje">
+      <div class="metrics">
+        <div class="mc" style="border-left-color:var(--acc,#2E4A3E)"><div class="ml">FOCO RESTANTE</div><div class="mv" id="m-foco">—</div><div class="ms" id="m-foco-s">—</div></div>
+        <div class="mc" style="border-left-color:#9A7535"><div class="ml">IMPACTO FINANCEIRO</div><div class="mv" id="m-roi">—</div><div class="ms" id="m-roi-s">—</div></div>
+        <div class="mc" style="border-left-color:#2C3E5A"><div class="ml">CARGA COGNITIVA</div><div class="mv" id="m-cog">—</div><div class="ms" id="m-cog-s">—</div></div>
+        <div class="mc" style="border-left-color:#C0392B"><div class="ml">URGÊNCIAS</div><div class="mv" id="m-urg">—</div><div class="ms" id="m-urg-s">—</div></div>
+      </div>
+      <div class="timeline">
+        <div class="tl-hdr"><span class="tl-title">Blocos de foco sugeridos</span><span style="font-size:10.5px;color:var(--tx3)">calculado automaticamente</span></div>
+        <div class="tl-track" id="tl-track"></div>
+      </div>
+      <div class="hj-grid">
+        <div>
+          <div class="tabs-mini">
+            <div class="tmtab active" onclick="setTodayTab('todas',this)">Todas</div>
+            <div class="tmtab" onclick="setTodayTab('pendentes',this)">Pendentes</div>
+            <div class="tmtab" onclick="setTodayTab('rotinas',this)">Rotinas</div>
+            <div class="tmtab" onclick="setTodayTab('objetivos',this)">Objetivos</div>
+          </div>
+          <div class="sec-hdr">
+            <span class="sec-title">Fila do dia <span style="color:var(--tx3);font-size:10px">· ordenada pelo algoritmo</span></span>
+            <span class="sec-cnt" id="hoje-cnt">—</span>
+          </div>
+          <div class="tl2" id="today-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW: SEMANA -->
+    <div class="view" id="view-semana">
+      <div class="cal-nav">
+        <button class="cn-btn" onclick="navWeek(-1)">←</button>
+        <button class="cn-btn" onclick="navWeek(1)">→</button>
+        <span class="cal-lbl" id="wk-lbl"></span>
+        <button class="cn-btn" onclick="goToday()">Hoje</button>
+      </div>
+      <div class="wk-wrap">
+        <div class="wk-hdr" id="wk-hdr"></div>
+        <div class="wk-body" id="wk-body"></div>
+      </div>
+    </div>
+
+    <!-- VIEW: MÊS -->
+    <div class="view" id="view-mes">
+      <div class="cal-nav">
+        <button class="cn-btn" onclick="navMonth(-1)">←</button>
+        <button class="cn-btn" onclick="navMonth(1)">→</button>
+        <span class="cal-lbl" id="mo-lbl"></span>
+        <button class="cn-btn" onclick="goToday()">Hoje</button>
+      </div>
+      <div class="cal-grid">
+        <div class="cal-hdr"><div>Dom</div><div>Seg</div><div>Ter</div><div>Qua</div><div>Qui</div><div>Sex</div><div>Sáb</div></div>
+        <div class="cal-days" id="cal-days"></div>
+      </div>
+    </div>
+
+    <!-- VIEW: ANO -->
+    <div class="view" id="view-ano">
+      <div class="cal-nav">
+        <button class="cn-btn" onclick="navYear(-1)">←</button>
+        <button class="cn-btn" onclick="navYear(1)">→</button>
+        <span class="cal-lbl" id="yr-lbl"></span>
+      </div>
+      <div class="yr-grid" id="yr-grid"></div>
+    </div>
+
+    <!-- VIEW: OBJETIVOS -->
+    <div class="view" id="view-objetivos">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px">
+        <div>
+          <div style="font-family:'DM Serif Display',serif;font-size:18px;margin-bottom:2px">Objetivos</div>
+          <div style="font-size:12px;color:var(--tx2)">Resultados esperados com tarefas vinculadas</div>
+        </div>
+        <button class="btn-add" onclick="openObjModal()">+ Novo objetivo</button>
+      </div>
+      <div class="obj-grid" id="obj-grid"></div>
+    </div>
+
+    <!-- VIEW: TAREFAS -->
+    <div class="view" id="view-tarefas">
+      <div class="filter-bar">
+        <input type="text" class="fi" style="width:210px" placeholder="Buscar…" id="s-search" oninput="renderAllTasks()">
+        <select class="fi" id="s-nicho" onchange="renderAllTasks()"><option value="">Todos os nichos</option></select>
+        <select class="fi" id="s-type" onchange="renderAllTasks()">
+          <option value="">Todos os tipos</option>
+          <option value="unica">Únicas</option>
+          <option value="recorrente">Recorrentes</option>
+          <option value="objetivo">De objetivo</option>
+        </select>
+        <select class="fi" id="s-sort" onchange="renderAllTasks()">
+          <option value="score">Prioridade</option>
+          <option value="data">Data</option>
+          <option value="nicho">Nicho</option>
+          <option value="titulo">Título</option>
+        </select>
+      </div>
+      <div class="tl2" id="all-list"></div>
+    </div>
+
+    <!-- VIEW: NICHO PROFILE -->
+    <div class="view" id="view-nicho-profile">
+      <div class="np-hero" id="np-hero">
+        <div class="np-icon" id="np-icon"></div>
+        <div>
+          <div class="np-name" id="np-name"></div>
+          <div class="np-meta" id="np-meta"></div>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn-sec" style="color:#fff;border-color:rgba(255,255,255,.4);font-size:12px" onclick="editCurrentNicho()">Editar nicho</button>
+          <button class="btn-sec" style="color:#fff;border-color:rgba(255,255,255,.4);font-size:12px" onclick="setView('hoje')">← Voltar</button>
+        </div>
+      </div>
+      <div class="np-stats" id="np-stats"></div>
+      <div class="sec-hdr" style="margin-bottom:9px">
+        <span class="sec-title">Tarefas deste nicho</span>
+        <button class="btn-add" style="font-size:12px;padding:5px 10px" onclick="openTaskModalNicho()">+ Tarefa</button>
+      </div>
+      <div class="tl2" id="np-task-list"></div>
+    </div>
+
+  </div>
+</div>
+</div>
+
+<!-- ── MODAL: TAREFA ── -->
+<div class="modal-ov" id="modal-task">
+<div class="modal">
+  <div class="mhdr">
+    <span class="mtitle" id="modal-task-title">Nova tarefa</span>
+    <button class="mclose" onclick="closeTaskModal()">✕</button>
+  </div>
+  <div class="fg"><label class="fl">TÍTULO</label><input type="text" class="fi2" id="t-title" placeholder="Ex: Preparar defesa fiscal com argumentos de sazonalidade"></div>
+  <div class="frow">
+    <div class="fg"><label class="fl">NICHO</label><select class="fi2" id="t-nicho"></select></div>
+    <div class="fg"><label class="fl">OBJETIVO VINCULADO</label><select class="fi2" id="t-obj"><option value="">Sem objetivo</option></select></div>
+  </div>
+  <div class="frow">
+    <div class="fg"><label class="fl">DATA</label><input type="date" class="fi2" id="t-date"></div>
+    <div class="fg"><label class="fl">DURAÇÃO</label>
+      <select class="fi2" id="t-dur">
+        <option value="0.25">15 min</option><option value="0.5">30 min</option>
+        <option value="1" selected>1 hora</option><option value="1.5">1h30</option>
+        <option value="2">2 horas</option><option value="3">3 horas</option><option value="4">4+ horas</option>
+      </select>
+    </div>
+  </div>
+  <div class="fg">
+    <label class="fl">RECORRÊNCIA</label>
+    <div class="recur-opts">
+      <div class="ro active" data-val="nenhuma" onclick="setRecur(this)">Única</div>
+      <div class="ro" data-val="diaria" onclick="setRecur(this)">Diária</div>
+      <div class="ro" data-val="semanal" onclick="setRecur(this)">Semanal</div>
+      <div class="ro" data-val="quinzenal" onclick="setRecur(this)">Quinzenal</div>
+      <div class="ro" data-val="mensal" onclick="setRecur(this)">Mensal</div>
+    </div>
+    <div class="fhint">Recorrentes aparecem automaticamente em todos os calendários</div>
+  </div>
+  <div class="sl-box">
+    <div class="sl-box-title">Critérios do algoritmo de prioridade</div>
+    <div class="sg"><label>Impacto financeiro</label><input type="range" min="1" max="5" value="3" id="sl-fin" oninput="updScore()"><span class="sv" id="sv-fin">3</span></div>
+    <div class="sg"><label>Urgência / custo do atraso</label><input type="range" min="1" max="5" value="3" id="sl-urg" oninput="updScore()"><span class="sv" id="sv-urg">3</span></div>
+    <div class="sg"><label>Peso cognitivo</label><input type="range" min="1" max="5" value="3" id="sl-cog" oninput="updScore()"><span class="sv" id="sv-cog">3</span></div>
+    <div class="sg"><label>Desbloqueia tarefas?</label><input type="range" min="1" max="5" value="1" id="sl-dep" oninput="updScore()"><span class="sv" id="sv-dep">1</span></div>
+  </div>
+  <div class="score-prev" id="score-prev">
+    <div><div class="sp-num" id="sp-num">—</div><div style="font-size:9px;color:var(--tx2)">PRIORIDADE</div></div>
+    <div><div class="sp-label" id="sp-lbl">—</div><div class="sp-desc" id="sp-desc">—</div></div>
+  </div>
+  <div class="btn-row">
+    <button class="btn-sec" onclick="closeTaskModal()">Cancelar</button>
+    <button class="btn-danger" id="btn-del-task" style="display:none;margin-right:auto" onclick="deleteTask()">Excluir</button>
+    <button class="btn-pri" id="modal-save-btn" onclick="saveTask()">Salvar</button>
+  </div>
+</div>
+</div>
+
+<!-- ── MODAL: OBJETIVO ── -->
+<div class="modal-ov" id="modal-obj">
+<div class="modal" style="max-width:480px">
+  <div class="mhdr">
+    <span class="mtitle" id="modal-obj-title">Novo objetivo</span>
+    <button class="mclose" onclick="closeObjModal()">✕</button>
+  </div>
+  <div class="fg"><label class="fl">TÍTULO</label><input type="text" class="fi2" id="o-title" placeholder="Ex: Certificação CPA-20 aprovada"></div>
+  <div class="frow">
+    <div class="fg"><label class="fl">NICHO</label><select class="fi2" id="o-nicho"></select></div>
+    <div class="fg"><label class="fl">PRAZO</label><input type="date" class="fi2" id="o-deadline"></div>
+  </div>
+  <div class="fg"><label class="fl">RESULTADO ESPERADO</label><textarea class="fi2" id="o-result" rows="2" placeholder="O que muda concretamente quando isso estiver pronto?"></textarea></div>
+  <div class="fg"><label class="fl">IMPACTO FINANCEIRO ESTIMADO (R$)</label><input type="text" class="fi2" id="o-valor" placeholder="Ex: 50000 (opcional)"></div>
+  <div class="btn-row">
+    <button class="btn-sec" onclick="closeObjModal()">Cancelar</button>
+    <button class="btn-danger" id="btn-del-obj" style="display:none;margin-right:auto" onclick="deleteObj()">Excluir</button>
+    <button class="btn-pri" id="obj-save-btn" onclick="saveObj()">Salvar objetivo</button>
+  </div>
+</div>
+</div>
+
+<!-- ── MODAL: NICHO ── -->
+<div class="modal-ov" id="modal-nicho">
+<div class="modal" style="max-width:440px">
+  <div class="mhdr">
+    <span class="mtitle" id="modal-nicho-title">Novo nicho</span>
+    <button class="mclose" onclick="closeNichoModal()">✕</button>
+  </div>
+  <div class="fg"><label class="fl">NOME DO NICHO</label><input type="text" class="fi2" id="n-name" placeholder="Ex: Família, Freelance, Estudos…"></div>
+  <div class="fg">
+    <label class="fl">ÍCONE</label>
+    <div class="icon-picker" id="icon-picker"></div>
+  </div>
+  <div class="fg">
+    <label class="fl">COR</label>
+    <div class="color-picker" id="color-picker"></div>
+  </div>
+  <div class="fg">
+    <label class="fl">DESCRIÇÃO (opcional)</label>
+    <input type="text" class="fi2" id="n-desc" placeholder="Ex: Projetos de desenvolvimento pessoal">
+  </div>
+  <div id="nicho-preview" style="margin-bottom:12px;padding:12px;border-radius:var(--rs);display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;color:#fff"></div>
+  <div class="btn-row">
+    <button class="btn-sec" onclick="closeNichoModal()">Cancelar</button>
+    <button class="btn-danger" id="btn-del-nicho" style="display:none;margin-right:auto" onclick="deleteNicho()">Excluir nicho</button>
+    <button class="btn-pri" id="nicho-save-btn" onclick="saveNicho()">Salvar</button>
+  </div>
+</div>
+</div>
+
+<script>
+// ════════════════════════════
+// STATE
+// ════════════════════════════
+const COLORS = ['#2E4A3E','#9A7535','#2C3E5A','#8B3E2A','#4A3070','#1A6B4A','#6B2D5E','#2D5E6B','#5E4A1A','#3D3D3D'];
+const ICONS  = ['🏫','💰','💙','🏠','📚','💼','🌱','⚡','🎯','🔬','🏋️','✈️','🎨','🤝','👨‍👩‍👧','🔧','📊','🌍'];
+const RECUR_LBL = {nenhuma:'Única',diaria:'Diária',semanal:'Semanal',quinzenal:'Quinzenal',mensal:'Mensal'};
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCPWOrLGrQWf2dERx7ssuLMU7Ool4r0Zq8",
+  authDomain: "tarefas-e8179.firebaseapp.com",
+  projectId: "tarefas-e8179",
+  storageBucket: "tarefas-e8179.firebasestorage.app",
+  messagingSenderId: "953557174216",
+  appId: "1:953557174216:web:d0b165d0a96f6598a0e2fd"
+};
+
+const FIRESTORE_COLLECTION = 'fluxo_apps';
+const FIRESTORE_DOC_ID = 'principal';
+let firebaseApp = null;
+let db = null;
+let firebaseReady = false;
+let remoteLoading = false;
+let saveTimer = null;
+let lastSaveAt = null;
+
+function baseState(){
+  return {
+    nichos: [
+      {id:'escola',  name:'Escola',         icon:'🏫', color:'#2E4A3E', desc:'Gestão escolar e operações'},
+      {id:'invest',  name:'Investimentos',  icon:'💰', color:'#9A7535', desc:'Certificações e carteira'},
+      {id:'saude',   name:'Saúde',          icon:'💙', color:'#2C3E5A', desc:'Bem-estar e qualidade de vida'},
+      {id:'pessoal', name:'Pessoal',        icon:'🏠', color:'#8B3E2A', desc:'Vida pessoal e família'},
+    ],
+    objectives: [],
+    tasks: [],
+  };
+}
+
+let state = baseState();
+
+const today = new Date();
+let navDate   = new Date(today);
+let curView   = 'hoje';
+let activeNichoId = '__all__';
+let todayTab  = 'todas';
+let editTaskId = null;
+let editObjId  = null;
+let editNichoId = null;
+let recurSel   = 'nenhuma';
+let selColor   = COLORS[0];
+let selIcon    = ICONS[0];
+let profileNichoId = null;
+
+// ════════════════════════════
+// HELPERS
+// ════════════════════════════
+function iso(d){ return d.toISOString().split('T')[0] }
+function addDays(d,n){ const r=new Date(d);r.setDate(r.getDate()+n);return r }
+function fmtFull(d){ return d.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) }
+function fmtShort(d){ return d.toLocaleDateString('pt-BR',{day:'numeric',month:'short'}) }
+function getNicho(id){ return state.nichos.find(n=>n.id===id)||{name:id,color:'#888',light:'#eee',icon:'◆'} }
+function lightColor(hex){ return hex+'22' }
+function calcScore(t){
+  const f=t.financeiro||3, u=t.urgencia||3, c=t.cognitivo||3, b=t.bloqueio||1, d=t.duracao||1;
+  return Math.min(100,Math.round((f/d)*18+u*13+b*8+(6-c)*5));
+}
+const PRI=[
+  {min:80,lbl:'Crítica',color:'#8B2E2E',bg:'#F5EAEA',bar:'#C0392B'},
+  {min:60,lbl:'Alta',   color:'#9A7535',bg:'#F5F0E6',bar:'#9A7535'},
+  {min:35,lbl:'Média',  color:'#2E4A3E',bg:'#E8F0EC',bar:'#2E4A3E'},
+  {min:0, lbl:'Baixa',  color:'#888',   bg:'#F4F2ED',bar:'#aaa'},
+];
+function getPri(s){ return PRI.find(p=>s>=p.min)||PRI[3] }
+function priDesc(s){
+  if(s>=80)return'Execute primeiro — risco alto de atraso';
+  if(s>=60)return'Priorize no período mais produtivo';
+  if(s>=35)return'Faça após as tarefas críticas';
+  return'Delegue ou agende para outra semana';
+}
+
+function expandTask(t,from,to){
+  if(!t.recorrencia||t.recorrencia==='nenhuma') return t.date>=from&&t.date<=to?[{...t,vd:t.date,done:!!t.done}]:[];
+  const base=new Date(t.date||iso(today)), end=new Date(to), r=[], step={diaria:1,semanal:7,quinzenal:14,mensal:30}[t.recorrencia]||1;
+  let cur=new Date(base);
+  while(cur<=end){
+    const curIso=iso(cur);
+    if(curIso>=from) r.push({...t,vd:curIso,id:t.id+'_'+curIso,done:!!(t.doneDates&&t.doneDates[curIso])});
+    if(t.recorrencia==='mensal'){ cur.setMonth(cur.getMonth()+1) }
+    else{ cur=addDays(cur,step) }
+    if(r.length>400)break;
+  }
+  return r;
+}
+function getForDate(d){ return state.tasks.flatMap(t=>expandTask(t,d,d)).sort((a,b)=>b.score-a.score) }
+function getForRange(f,t){ return state.tasks.flatMap(tt=>expandTask(tt,f,t)) }
+
+// ════════════════════════════
+// FIREBASE / FIRESTORE
+// ════════════════════════════
+function setSyncStatus(txt, detail='', kind='warn'){
+  const el=document.getElementById('sync-status');
+  if(!el) return;
+  el.textContent='';
+  el.title=detail || txt || 'Status de sincronização';
+  el.dataset.detail=detail || txt || 'Status de sincronização';
+  el.setAttribute('aria-label', txt || 'Status de sincronização');
+  el.classList.remove('ok','warn','err');
+  el.classList.add(kind || 'warn');
+}
+
+function firebaseErr(e){
+  if(!e) return 'Erro desconhecido.';
+  const code=e.code?`Código: ${e.code}`:'';
+  const msg=e.message?`Mensagem: ${e.message}`:String(e);
+  return [code,msg].filter(Boolean).join('\n');
+}
+
+function showSyncDetail(){
+  const el=document.getElementById('sync-status');
+  if(!el) return;
+  alert(el.dataset.detail || el.textContent || 'Sem detalhe disponível.');
+}
+
+function firebaseStatusFromError(e){
+  const code=(e&&e.code)||'';
+  if(code.includes('permission-denied')) return 'Firebase: sem permissão — app local';
+  if(code.includes('not-found')) return 'Firebase: banco não encontrado — app local';
+  if(code.includes('failed-precondition')) return 'Firebase: Firestore não criado — app local';
+  if(code.includes('unavailable')) return 'Firebase: indisponível — app local';
+  if(code.includes('unauthenticated')) return 'Firebase: não autenticado — app local';
+  return 'Firebase: erro Firestore — app local';
+}
+
+function loadScript(src, timeoutMs=8000){
+  return new Promise((resolve,reject)=>{
+    if(document.querySelector(`script[src="${src}"]`)){ resolve(); return; }
+    const s=document.createElement('script');
+    let done=false;
+    const timer=setTimeout(()=>{
+      if(done) return;
+      done=true;
+      s.remove();
+      reject(new Error('Timeout carregando '+src));
+    },timeoutMs);
+    s.src=src;
+    s.async=true;
+    s.onload=()=>{ if(done) return; done=true; clearTimeout(timer); resolve(); };
+    s.onerror=()=>{ if(done) return; done=true; clearTimeout(timer); reject(new Error('Falha carregando '+src)); };
+    document.head.appendChild(s);
+  });
+}
+
+async function initFirebase(){
+  try{
+    setSyncStatus('Firebase: carregando SDK…', 'Carregando SDK do Firebase via CDN.', 'warn');
+    await loadScript('https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js');
+    await loadScript('https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js');
+    if(!window.firebase) throw new Error('SDK Firebase não carregou');
+    firebaseApp = firebase.apps.length ? firebase.app() : firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    try{ db.settings({experimentalAutoDetectLongPolling:true, merge:true}); }catch(_e){}
+    firebaseReady = true;
+    setSyncStatus('Firebase: conectando…', 'SDK carregado. Tentando ler o documento fluxo_apps/principal no Firestore.', 'warn');
+    return true;
+  }catch(e){
+    console.error('Erro ao iniciar Firebase', e);
+    firebaseReady = false;
+    db = null;
+    setSyncStatus('Firebase: SDK falhou — app local', firebaseErr(e), 'err');
+    return false;
+  }
+}
+
+function normalizeState(raw){
+  const base=baseState();
+  const clean={
+    nichos: Array.isArray(raw?.nichos)&&raw.nichos.length?raw.nichos:base.nichos,
+    objectives: Array.isArray(raw?.objectives)?raw.objectives:[],
+    tasks: Array.isArray(raw?.tasks)?raw.tasks:[],
+  };
+  clean.tasks=clean.tasks.map(t=>({
+    ...t,
+    done: !!t.done,
+    doneDates: t.doneDates||{},
+    score: calcScore(t),
+  }));
+  return clean;
+}
+
+function withTimeout(promise, ms, label){
+  let timer;
+  const timeout=new Promise((_,reject)=>{
+    timer=setTimeout(()=>reject(new Error(label||'Operação expirou')),ms);
+  });
+  return Promise.race([promise,timeout]).finally(()=>clearTimeout(timer));
+}
+
+async function loadRemoteState(){
+  remoteLoading=true;
+  if(!firebaseReady||!db){
+    remoteLoading=false;
+    setSyncStatus('Firebase: offline — app local', 'O SDK do Firebase não iniciou. O app está funcionando apenas em memória local.', 'err');
+    return false;
+  }
+  try{
+    const ref=db.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_DOC_ID);
+    const snap=await withTimeout(ref.get(),10000,'Firestore demorou para responder');
+    if(snap.exists){
+      const data=snap.data()||{};
+      state=normalizeState(data.state||data);
+      setSyncStatus('Firebase: sincronizado', 'Dados carregados do Firestore em fluxo_apps/principal.', 'ok');
+    }else{
+      const initial=normalizeState(state);
+      await withTimeout(ref.set({
+        state:initial,
+        version:'fluxo-v1-firestore',
+        createdAt:firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+      }),10000,'Firestore demorou para criar base');
+      state=initial;
+      setSyncStatus('Firebase: base criada', 'Documento fluxo_apps/principal criado no Firestore.', 'ok');
+    }
+    return true;
+  }catch(e){
+    console.error('Erro ao carregar Firestore', e);
+    const detail=firebaseErr(e)+'\n\nCaminho tentado: fluxo_apps/principal';
+    setSyncStatus(firebaseStatusFromError(e), detail, 'err');
+    toast('Firestore não conectou. Clique no status no topo para ver o erro.');
+    return false;
+  }finally{
+    remoteLoading=false;
+  }
+}
+
+function scheduleSave(){
+  if(remoteLoading||!firebaseReady||!db) return;
+  setSyncStatus('Firebase: salvando…', 'Enviando alterações para fluxo_apps/principal.', 'warn');
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(saveStateNow,450);
+}
+
+async function saveStateNow(){
+  if(remoteLoading||!firebaseReady||!db) return;
+  try{
+    await db.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_DOC_ID).set({
+      state:normalizeState(state),
+      version:'fluxo-v1-firestore',
+      updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+    },{merge:true});
+    lastSaveAt=new Date();
+    setSyncStatus('Firebase: salvo '+lastSaveAt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}), 'Última gravação concluída no Firestore.', 'ok');
+  }catch(e){
+    console.error('Erro ao salvar Firestore', e);
+    setSyncStatus('Firebase: erro ao salvar', firebaseErr(e)+'\n\nCaminho tentado: fluxo_apps/principal', 'err');
+    toast('Erro ao salvar. Clique no status no topo para ver o erro.');
+  }
+}
+
+// ════════════════════════════
+// DADOS DEMO / SEED MANUAL
+// ════════════════════════════
+function seedDemo(){
+  const d=iso(today), d1=iso(addDays(today,1)), d2=iso(addDays(today,2));
+  const d3=iso(addDays(today,3)), d7=iso(addDays(today,7)), d14=iso(addDays(today,14));
+  const dm3=iso(addDays(today,-3)), dm7=iso(addDays(today,-7));
+
+  state.objectives=[
+    {id:1,title:'Defesa fiscal — Intimação 043-903422/2026',nichoId:'escola',deadline:'2026-06-30',result:'Cancelamento ou redução do auto de infração',valor:'280000'},
+    {id:2,title:'Certificação CPA-20 aprovada',nichoId:'invest',deadline:'2026-12-31',result:'Habilitação formal para assessoria de investimentos',valor:'50000'},
+    {id:3,title:'Implantação ERP escolar',nichoId:'escola',deadline:'2026-09-30',result:'Redução de 30% no tempo de processos administrativos',valor:''},
+    {id:4,title:'Redução de peso — 98 kg → 90 kg',nichoId:'saude',deadline:'2026-12-31',result:'Mais energia, foco e qualidade de vida',valor:''},
+    {id:5,title:'Reserva de emergência — R$ 30 mil',nichoId:'invest',deadline:'2026-12-31',result:'6 meses de despesas pessoais cobertos',valor:'30000'},
+  ];
+
+  const raw=[
+    // CRÍTICAS HOJE
+    {id:101,title:'Finalizar planilha de exposição fiscal (EducaCenso × NFS-e)',nichoId:'escola',date:d,dur:3,fin:5,urg:5,cog:5,dep:5,rec:'nenhuma',objId:1,done:false},
+    {id:102,title:'Reunião com contador — revisar argumentos de defesa fiscal',nichoId:'escola',date:d,dur:2,fin:5,urg:5,cog:4,dep:4,rec:'nenhuma',objId:1,done:false},
+    {id:103,title:'Revisar contrato com fornecedor de merenda escolar',nichoId:'escola',date:d,dur:0.5,fin:3,urg:3,cog:2,dep:1,rec:'nenhuma',objId:null,done:false},
+    // RECORRENTES DIÁRIAS
+    {id:201,title:'Registrar refeições — controle calórico diário',nichoId:'saude',date:dm7,dur:0.25,fin:1,urg:3,cog:1,dep:1,rec:'diaria',objId:4,done:false},
+    {id:202,title:'Checar mensagens críticas (WhatsApp + e-mail)',nichoId:'escola',date:dm7,dur:0.5,fin:3,urg:4,cog:2,dep:3,rec:'diaria',objId:null,done:false},
+    {id:203,title:'Revisar agenda do dia seguinte e ajustar prioridades',nichoId:'pessoal',date:dm7,dur:0.25,fin:2,urg:2,cog:2,dep:2,rec:'diaria',objId:null,done:false},
+    // RECORRENTES SEMANAIS
+    {id:301,title:'Reunião de alinhamento com equipe pedagógica',nichoId:'escola',date:dm3,dur:1,fin:3,urg:3,cog:3,dep:3,rec:'semanal',objId:null,done:false},
+    {id:302,title:'Revisão financeira semanal — fluxo de caixa escolar',nichoId:'escola',date:dm3,dur:1,fin:4,urg:3,cog:3,dep:2,rec:'semanal',objId:null,done:false},
+    {id:303,title:'Sessão de estudo CPA-20 — mínimo 2 horas',nichoId:'invest',date:dm7,dur:2,fin:3,urg:2,cog:4,dep:2,rec:'semanal',objId:2,done:false},
+    {id:304,title:'Treino físico adaptado (sem impacto — joelho)',nichoId:'saude',date:dm7,dur:1,fin:1,urg:2,cog:1,dep:1,rec:'semanal',objId:4,done:false},
+    // RECORRENTES MENSAIS
+    {id:401,title:'Enviar cobrança de mensalidades — turmas do mês',nichoId:'escola',date:dm7,dur:1,fin:5,urg:5,cog:2,dep:2,rec:'mensal',objId:null,done:false},
+    {id:402,title:'Revisão de folha de pagamento + encargos',nichoId:'escola',date:dm7,dur:2,fin:4,urg:4,cog:3,dep:2,rec:'mensal',objId:null,done:false},
+    {id:403,title:'Aporte na reserva de emergência pessoal',nichoId:'invest',date:dm7,dur:0.25,fin:4,urg:3,cog:1,dep:1,rec:'mensal',objId:5,done:false},
+    // OBJ 1 — DEFESA FISCAL
+    {id:501,title:'Levantar NFS-e emitidas 2021–2026 por período',nichoId:'escola',date:dm3,dur:2,fin:5,urg:4,cog:4,dep:5,rec:'nenhuma',objId:1,done:true},
+    {id:502,title:'Mapear matrículas mensais com dados EducaCenso 2023',nichoId:'escola',date:dm7,dur:1.5,fin:5,urg:4,cog:4,dep:4,rec:'nenhuma',objId:1,done:true},
+    {id:503,title:'Documentar argumento da sazonalidade (jan 70%, fev 25%, mar 5%)',nichoId:'escola',date:d2,dur:1,fin:4,urg:3,cog:4,dep:3,rec:'nenhuma',objId:1,done:false},
+    {id:504,title:'Redigir petição de defesa com advogado',nichoId:'escola',date:d1,dur:4,fin:5,urg:5,cog:5,dep:3,rec:'nenhuma',objId:1,done:false},
+    {id:505,title:'Protocolar defesa na Secretaria de Finanças',nichoId:'escola',date:d7,dur:0.5,fin:5,urg:5,cog:2,dep:2,rec:'nenhuma',objId:1,done:false},
+    // OBJ 2 — CPA
+    {id:601,title:'Concluir módulo de Fundos de Investimento — apostila ANBIMA',nichoId:'invest',date:d2,dur:3,fin:3,urg:2,cog:5,dep:3,rec:'nenhuma',objId:2,done:false},
+    {id:602,title:'Simulado completo CPA-20 (100 questões)',nichoId:'invest',date:d7,dur:2,fin:3,urg:2,cog:4,dep:1,rec:'nenhuma',objId:2,done:false},
+    {id:603,title:'Agendar prova CPA-20 na plataforma ANBIMA',nichoId:'invest',date:d14,dur:0.25,fin:4,urg:3,cog:1,dep:4,rec:'nenhuma',objId:2,done:false},
+    // OBJ 3 — ERP
+    {id:701,title:'Levantar requisitos do ERP com coordenadores',nichoId:'escola',date:d3,dur:2,fin:3,urg:2,cog:3,dep:5,rec:'nenhuma',objId:3,done:false},
+    {id:702,title:'Solicitar orçamentos — 3 fornecedores de software escolar',nichoId:'escola',date:d7,dur:1,fin:3,urg:2,cog:2,dep:3,rec:'nenhuma',objId:3,done:false},
+    // AVULSAS
+    {id:801,title:'Renovar alvará de funcionamento da escola',nichoId:'escola',date:d3,dur:1,fin:4,urg:4,cog:2,dep:1,rec:'nenhuma',objId:null,done:false},
+    {id:802,title:'Pesquisar nova seguradora — frota escolar',nichoId:'escola',date:d7,dur:1,fin:3,urg:2,cog:2,dep:1,rec:'nenhuma',objId:null,done:false},
+    {id:803,title:'Consulta médica — checkup anual',nichoId:'saude',date:d14,dur:1,fin:1,urg:2,cog:1,dep:1,rec:'nenhuma',objId:null,done:false},
+  ];
+
+  state.tasks=raw.map(t=>({
+    id:t.id, title:t.title, nichoId:t.nichoId, date:t.date,
+    duracao:t.dur, financeiro:t.fin, urgencia:t.urg, cognitivo:t.cog, bloqueio:t.dep,
+    recorrencia:t.rec, objId:t.objId||null, done:t.done,
+    score:calcScore({financeiro:t.fin,urgencia:t.urg,cognitivo:t.cog,bloqueio:t.dep,duracao:t.dur})
+  }));
+}
+
+// ════════════════════════════
+// RENDER TASK CARD
+// ════════════════════════════
+function tcHTML(t,rank){
+  const n=getNicho(t.nichoId); const p=getPri(t.score);
+  const rl=t.recorrencia&&t.recorrencia!=='nenhuma'?RECUR_LBL[t.recorrencia]:'';
+  const isDone=t.done&&(!t.recorrencia||t.recorrencia==='nenhuma');
+  const baseId=String(t.id).split('_')[0];
+  return `<div class="tc ${isDone?'done':''}" id="tc-${t.id}">
+    <div class="tc-bar" style="background:${p.bar}"></div>
+    <div class="tc-chk" onclick="toggleTask('${t.id}',event)"><div class="tc-dot"></div></div>
+    <div class="tc-body">
+      <div class="tc-ttl">${rank?rank+'. ':''}${t.title}</div>
+      <div class="tc-meta">
+        <span class="badge" style="background:${lightColor(n.color)};color:${n.color}">${n.icon} ${n.name}</span>
+        <span class="badge" style="background:${p.bg};color:${p.color}">${p.lbl}</span>
+        ${rl?`<span class="badge" style="background:#F0F0F0;color:#666">${rl}</span>`:''}
+        ${t.objId?`<span class="badge" style="background:${lightColor('#2E4A3E')};color:#2E4A3E">▸ Obj</span>`:''}
+        <span class="tc-time">~${t.duracao<1?Math.round(t.duracao*60)+'min':t.duracao+'h'}</span>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+      <div class="tc-score"><div class="sdot" style="background:${p.bar}"></div>${t.score}</div>
+      <div style="display:flex;gap:3px">
+        <button class="tc-btn" onclick="openTaskModal(${baseId})" style="opacity:0;transition:.13s" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0">✎</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderList(list,cid,ranked=false){
+  const el=document.getElementById(cid);if(!el)return;
+  el.innerHTML=list.length?list.map((t,i)=>tcHTML(t,ranked?i+1:0)).join(''):'<div class="empty">Nenhuma tarefa neste filtro</div>';
+}
+
+// ════════════════════════════
+// HOJE
+// ════════════════════════════
+function renderToday(){
+  const d=iso(today);
+  let list=getForDate(d);
+  const all=list;
+  if(todayTab==='pendentes') list=list.filter(t=>!t.done);
+  else if(todayTab==='rotinas') list=list.filter(t=>t.recorrencia&&t.recorrencia!=='nenhuma');
+  else if(todayTab==='objetivos') list=list.filter(t=>t.objId);
+  document.getElementById('hoje-cnt').textContent=list.length+' tarefas';
+  renderList(list,'today-list',true);
+
+  const pend=all.filter(t=>!t.done), done=all.filter(t=>t.done);
+  const totalH=pend.reduce((s,t)=>s+t.duracao,0);
+  const urg=pend.filter(t=>t.urgencia>=4).length;
+  const avgCog=pend.length?Math.round(pend.reduce((s,t)=>s+(t.cognitivo||3),0)/pend.length*20):0;
+  const hiFin=pend.filter(t=>t.financeiro>=4).length;
+
+  document.getElementById('m-foco').textContent=totalH<1?Math.round(totalH*60)+'min':totalH.toFixed(1).replace('.0','')+'h';
+  document.getElementById('m-foco-s').textContent=done.length+' de '+all.length+' concluídas';
+  document.getElementById('m-roi').textContent=hiFin>=3?'Alto':hiFin>=1?'Médio':'Baixo';
+  document.getElementById('m-roi-s').textContent=hiFin+' tarefas de impacto';
+  document.getElementById('m-cog').textContent=avgCog+'%';
+  document.getElementById('m-cog-s').textContent=avgCog>70?'Acima do ideal':'dentro do limite';
+  document.getElementById('m-urg').textContent=urg;
+  document.getElementById('m-urg-s').textContent=urg?'atenção necessária':'tudo sob controle';
+
+  const pct=all.length?Math.round(done.length/all.length*100):0;
+  document.getElementById('sb-score').textContent=pct;
+  document.getElementById('sb-sub').textContent=done.length+' de '+all.length+' concluídas';
+  document.getElementById('sb-bar').style.width=pct+'%';
+
+  // timeline
+  let hour=8;
+  const blocks=pend.sort((a,b)=>b.score-a.score).slice(0,6).map(t=>{
+    const n=getNicho(t.nichoId), end=hour+t.duracao;
+    const b={label:t.title.substring(0,22)+(t.title.length>22?'…':''), time:`${Math.floor(hour)}:${String(Math.round((hour%1)*60)).padStart(2,'0')}–${Math.floor(end)}:${String(Math.round((end%1)*60)).padStart(2,'0')}`, color:n.color, light:lightColor(n.color), w:Math.max(85,t.duracao*75)};
+    hour=end+0.5; return b;
+  });
+  document.getElementById('tl-track').innerHTML=blocks.map(b=>`<div class="tl-block" style="background:${b.light};color:${b.color};min-width:${b.w}px"><div class="tt">${b.time}</div><div class="tl">${b.label}</div></div>`).join('');
+}
+
+// ════════════════════════════
+// ALL TASKS
+// ════════════════════════════
+function renderAllTasks(){
+  const search=(document.getElementById('s-search')||{value:''}).value.toLowerCase();
+  const nicho=(document.getElementById('s-nicho')||{value:''}).value;
+  const type=(document.getElementById('s-type')||{value:''}).value;
+  const sort=(document.getElementById('s-sort')||{value:'score'}).value;
+  let list=[...state.tasks];
+  if(search) list=list.filter(t=>t.title.toLowerCase().includes(search));
+  if(nicho) list=list.filter(t=>t.nichoId===nicho);
+  if(type==='unica') list=list.filter(t=>!t.recorrencia||t.recorrencia==='nenhuma');
+  else if(type==='recorrente') list=list.filter(t=>t.recorrencia&&t.recorrencia!=='nenhuma');
+  else if(type==='objetivo') list=list.filter(t=>t.objId);
+  if(sort==='score') list.sort((a,b)=>b.score-a.score);
+  else if(sort==='data') list.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  else if(sort==='nicho') list.sort((a,b)=>a.nichoId.localeCompare(b.nichoId));
+  else list.sort((a,b)=>a.title.localeCompare(b.title));
+  renderList(list,'all-list');
+}
+
+// ════════════════════════════
+// OBJECTIVES
+// ════════════════════════════
+function renderObjectives(){
+  const el=document.getElementById('obj-grid');
+  el.innerHTML=state.objectives.map(o=>{
+    const n=getNicho(o.nichoId);
+    const ot=state.tasks.filter(t=>t.objId===o.id);
+    const done=ot.filter(t=>t.done).length;
+    const pct=ot.length?Math.round(done/ot.length*100):0;
+    const dl=o.deadline?new Date(o.deadline).toLocaleDateString('pt-BR',{month:'short',year:'numeric'}):'';
+    return `<div class="obj-card">
+      <div class="obj-top">
+        <div>
+          <div class="obj-title">${n.icon} ${o.title}</div>
+          <div class="obj-sub">${o.result}</div>
+        </div>
+        <div class="obj-actions">
+          <button class="obj-btn" onclick="openObjModal(${o.id});event.stopPropagation()">✎</button>
+        </div>
+      </div>
+      ${o.valor?`<div style="font-size:10.5px;color:var(--tx3);margin-bottom:5px">Impacto: <strong style="color:var(--tx)">R$ ${parseInt(o.valor).toLocaleString('pt-BR')}</strong></div>`:''}
+      <span class="badge" style="background:${lightColor(n.color)};color:${n.color};margin-bottom:8px;display:inline-block">${n.name}</span>
+      <div class="obj-prog"><div class="obj-prog-fill" style="width:${pct}%;background:${n.color}"></div></div>
+      <div class="obj-stats">
+        <div class="obj-stat"><strong>${pct}%</strong>concluído</div>
+        <div class="obj-stat"><strong>${ot.length}</strong>tarefas</div>
+        ${dl?`<div class="obj-stat"><strong>${dl}</strong>prazo</div>`:''}
+      </div>
+      ${ot.length?`<div class="obj-tp">${ot.slice(0,4).map(t=>`<div class="otp-item ${t.done?'done':''}"><div class="otp-chk ${t.done?'done':''}"></div>${t.title.substring(0,44)}${t.title.length>44?'…':''}</div>`).join('')}${ot.length>4?`<div style="font-size:10px;color:var(--tx3);padding-top:2px">+${ot.length-4} mais tarefas</div>`:''}</div>`:''}
+    </div>`;
+  }).join('')||'<div class="empty" style="grid-column:1/-1">Nenhum objetivo cadastrado. Crie um para organizar suas tarefas por resultado.</div>';
+}
+
+// ════════════════════════════
+// NICHO PROFILE
+// ════════════════════════════
+function openNichoProfile(id){
+  profileNichoId=id;
+  const n=getNicho(id);
+  document.getElementById('np-hero').style.background=n.color;
+  document.getElementById('np-icon').textContent=n.icon;
+  document.getElementById('np-name').textContent=n.name;
+  document.getElementById('np-meta').textContent=n.desc||'';
+  const tasks=state.tasks.filter(t=>t.nichoId===id);
+  const done=tasks.filter(t=>t.done).length;
+  const recur=tasks.filter(t=>t.recorrencia&&t.recorrencia!=='nenhuma').length;
+  const objs=state.objectives.filter(o=>o.nichoId===id).length;
+  document.getElementById('np-stats').innerHTML=[
+    {lbl:'Total de tarefas',val:tasks.length,color:n.color},
+    {lbl:'Concluídas',val:done,color:'#2E4A3E'},
+    {lbl:'Rotinas ativas',val:recur,color:'#9A7535'},
+    {lbl:'Objetivos',val:objs,color:'#2C3E5A'},
+  ].map(m=>`<div class="mc" style="border-left-color:${m.color}"><div class="ml">${m.lbl.toUpperCase()}</div><div class="mv">${m.val}</div></div>`).join('');
+  const sortedTasks=[...tasks].sort((a,b)=>b.score-a.score);
+  renderList(sortedTasks,'np-task-list',true);
+  setView('nicho-profile');
+}
+
+function editCurrentNicho(){ openNichoModal(profileNichoId) }
+function openTaskModalNicho(){
+  openTaskModal();
+  setTimeout(()=>{ if(profileNichoId){ const sel=document.getElementById('t-nicho'); if(sel) sel.value=profileNichoId; } },50);
+}
+
+// ════════════════════════════
+// SIDEBAR NICHOS
+// ════════════════════════════
+function renderSidebarNichos(){
+  const list=document.getElementById('nicho-list');
+  list.innerHTML=state.nichos.map(n=>`
+    <div class="nicho-row ${activeNichoId===n.id?'active':''}" id="ni-${n.id}">
+      <span class="nd" style="background:${n.color}"></span>
+      <span onclick="filterNicho('${n.id}',this.parentElement)">${n.icon} ${n.name}</span>
+      <span class="ne" onclick="openNichoProfile('${n.id}');event.stopPropagation()" title="Ver perfil">↗</span>
+      <span class="ne" onclick="openNichoModal('${n.id}');event.stopPropagation()" title="Editar" style="margin-left:2px">✎</span>
+    </div>`).join('');
+  // update select dropdowns
+  const opts=state.nichos.map(n=>`<option value="${n.id}">${n.icon} ${n.name}</option>`).join('');
+  ['t-nicho','o-nicho'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=opts; });
+  const sn=document.getElementById('s-nicho');
+  if(sn) sn.innerHTML='<option value="">Todos os nichos</option>'+state.nichos.map(n=>`<option value="${n.id}">${n.name}</option>`).join('');
+  // update CSS accent based on active nicho
+  const acc=activeNichoId==='__all__'?state.nichos[0]:getNicho(activeNichoId);
+  if(acc){ applyAccent(acc.color) }
+}
+
+function applyAccent(hex){
+  document.documentElement.style.setProperty('--acc',hex);
+  document.documentElement.style.setProperty('--acc-l',hex+'22');
+  document.querySelector('.sb').style.background=hex;
+}
+
+function filterNicho(id, el){
+  activeNichoId=id;
+  document.querySelectorAll('.nicho-row,.sb-item[id^="ni-"]').forEach(e=>e.classList.remove('active'));
+  if(el) el.classList.add('active');
+  if(id==='__all__'){ applyAccent(state.nichos[0].color); renderSidebarNichos(); }
+  else{ const n=getNicho(id); applyAccent(n.color); renderSidebarNichos(); }
+}
+
+// ════════════════════════════
+// CALENDARS
+// ════════════════════════════
+function renderMonth(){
+  const y=navDate.getFullYear(), m=navDate.getMonth();
+  document.getElementById('mo-lbl').textContent=new Date(y,m,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  const first=new Date(y,m,1).getDay(), dim=new Date(y,m+1,0).getDate(), pd=new Date(y,m,0).getDate();
+  let html='';
+  for(let i=first-1;i>=0;i--) html+=`<div class="cal-day other-m"><div class="cal-dn">${pd-i}</div></div>`;
+  for(let d=1;d<=dim;d++){
+    const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isT=ds===iso(today);
+    const dt=getForDate(ds).sort((a,b)=>b.score-a.score);
+    html+=`<div class="cal-day ${isT?'today':''}">
+      <div class="cal-dn">${isT?`<div class="cal-dn-inner">${d}</div>`:d}</div>
+      ${dt.slice(0,2).map(t=>{const n=getNicho(t.nichoId);return`<div class="cal-pill" style="background:${lightColor(n.color)};color:${n.color}">${t.title.substring(0,17)}${t.title.length>17?'…':''}</div>`}).join('')}
+      ${dt.length>2?`<div class="cal-more">+${dt.length-2}</div>`:''}
+    </div>`;
+  }
+  const rem=42-(first+dim);
+  for(let d=1;d<=rem;d++) html+=`<div class="cal-day other-m"><div class="cal-dn">${d}</div></div>`;
+  document.getElementById('cal-days').innerHTML=html;
+}
+
+function renderWeek(){
+  const dow=navDate.getDay(), ws=new Date(navDate);
+  ws.setDate(navDate.getDate()-dow);
+  const days=Array.from({length:7},(_,i)=>addDays(ws,i));
+  document.getElementById('wk-lbl').textContent=fmtShort(days[0])+' – '+fmtShort(days[6]);
+  const wd=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  let hdr='<div class="whc" style="background:var(--sf2)"></div>';
+  days.forEach((d,i)=>{const isT=iso(d)===iso(today);hdr+=`<div class="whc ${isT?'today':''}"><div class="wd">${wd[i]}</div><div class="wn">${d.getDate()}</div></div>`;});
+  document.getElementById('wk-hdr').innerHTML=hdr;
+  const hours=[7,8,9,10,11,12,13,14,15,16,17,18];
+  let body='<div class="wtime-col">'+hours.map(h=>`<div class="wts">${h}:00</div>`).join('')+'</div>';
+  days.forEach(d=>{
+    const ds=iso(d), dt=getForDate(ds);
+    body+=`<div class="wdcol">${hours.map(()=>'<div class="wdslot"></div>').join('')}${dt.map((t,i)=>{const n=getNicho(t.nichoId);const top=4+i*46;return`<div class="wev" style="top:${top}px;height:42px;background:${lightColor(n.color)};color:${n.color};border-left-color:${n.color}">${t.title.substring(0,18)}${t.title.length>18?'…':''}</div>`}).join('')}</div>`;
+  });
+  document.getElementById('wk-body').innerHTML=body;
+}
+
+function renderYear(){
+  const y=navDate.getFullYear();
+  document.getElementById('yr-lbl').textContent=y;
+  const MN=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  let html='';
+  for(let m=0;m<12;m++){
+    const fd=new Date(y,m,1), sd=fd.getDay(), dim=new Date(y,m+1,0).getDate();
+    const tmap={};
+    getForRange(`${y}-${String(m+1).padStart(2,'0')}-01`,`${y}-${String(m+1).padStart(2,'0')}-${String(dim).padStart(2,'0')}`).forEach(t=>{const d=parseInt((t.vd||t.date||'').split('-')[2]);if(d)tmap[d]=(tmap[d]||0)+1});
+    const tot=Object.values(tmap).reduce((a,b)=>a+b,0);
+    let cells='DSTQQSS'.split('').map(c=>`<div style="font-size:7.5px;text-align:center;color:var(--tx3)">${c}</div>`).join('');
+    for(let i=0;i<sd;i++) cells+='<div></div>';
+    for(let d=1;d<=dim;d++){
+      const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const isT=ds===iso(today), has=tmap[d]>0;
+      cells+=`<div class="ym-d ${isT?'today':has?'has':''}">${d}</div>`;
+    }
+    html+=`<div class="ym-card"><div class="ym-hdr">${MN[m]}${tot?`<span>${tot}</span>`:''}</div><div class="ym-mini">${cells}</div></div>`;
+  }
+  document.getElementById('yr-grid').innerHTML=html;
+}
+
+// ════════════════════════════
+// ACTIONS
+// ════════════════════════════
+function toggleTask(vid, e){
+  e&&e.stopPropagation();
+  const raw=String(vid);
+  const m=raw.match(/^(.+)_(\d{4}-\d{2}-\d{2})$/);
+  const base=m?m[1]:raw;
+  const occDate=m?m[2]:iso(today);
+  const t=state.tasks.find(t=>String(t.id)===base);
+  if(!t) return;
+  if(t.recorrencia&&t.recorrencia!=='nenhuma'){
+    t.doneDates=t.doneDates||{};
+    if(t.doneDates[occDate]) delete t.doneDates[occDate];
+    else t.doneDates[occDate]=true;
+    toast(t.doneDates[occDate]?'Rotina concluída hoje ✓':'Rotina reaberta');
+  }else{
+    t.done=!t.done;
+    toast(t.done?'Tarefa concluída ✓':'Tarefa reaberta');
+  }
+  renderAll();
+  scheduleSave();
+}
+
+function setTodayTab(tab,el){
+  todayTab=tab;
+  document.querySelectorAll('.tmtab').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  renderToday();
+}
+
+function setView(v, sbEl){
+  curView=v;
+  document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.vt').forEach(e=>e.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  const vt=document.getElementById('vt-'+v);
+  if(vt) vt.classList.add('active');
+  const T={hoje:'Hoje',semana:'Semana',mes:'Mês',ano:'Ano',objetivos:'Objetivos',tarefas:'Tarefas','nicho-profile':getNicho(profileNichoId)?.name||'Nicho'};
+  document.getElementById('tb-title').textContent=T[v]||v;
+  closeSidebar();
+}
+
+function navMonth(d){navDate.setMonth(navDate.getMonth()+d);renderMonth()}
+function navWeek(d){navDate.setDate(navDate.getDate()+d*7);renderWeek()}
+function navYear(d){navDate.setFullYear(navDate.getFullYear()+d);renderYear()}
+function goToday(){navDate=new Date(today);renderAll()}
+
+// ════════════════════════════
+// MODAL: TASK
+// ════════════════════════════
+function setRecur(el){
+  recurSel=el.dataset.val;
+  document.querySelectorAll('.ro').forEach(e=>e.classList.toggle('active',e.dataset.val===recurSel));
+}
+
+function updScore(){
+  const f=+document.getElementById('sl-fin').value, u=+document.getElementById('sl-urg').value;
+  const c=+document.getElementById('sl-cog').value, b=+document.getElementById('sl-dep').value;
+  const d=+document.getElementById('t-dur').value||1;
+  ['fin','urg','cog','dep'].forEach(k=>document.getElementById('sv-'+k).textContent=document.getElementById('sl-'+k).value);
+  const s=Math.min(100,Math.round((f/d)*18+u*13+b*8+(6-c)*5));
+  const p=getPri(s);
+  document.getElementById('sp-num').textContent=s;
+  document.getElementById('sp-num').style.color=p.color;
+  document.getElementById('sp-lbl').textContent='Prioridade '+p.lbl;
+  document.getElementById('sp-desc').textContent=priDesc(s);
+  document.getElementById('score-prev').style.background=p.bg;
+}
+
+function openTaskModal(id){
+  editTaskId=id||null; recurSel='nenhuma';
+  renderSidebarNichos(); // refresh nicho dropdowns
+  const os=document.getElementById('t-obj');
+  os.innerHTML='<option value="">Sem objetivo</option>'+state.objectives.map(o=>`<option value="${o.id}">${o.title.substring(0,40)}</option>`).join('');
+  if(id){
+    const t=state.tasks.find(t=>t.id==id);
+    if(t){
+      document.getElementById('t-title').value=t.title;
+      document.getElementById('t-nicho').value=t.nichoId;
+      document.getElementById('t-date').value=t.date||iso(today);
+      document.getElementById('t-dur').value=t.duracao;
+      document.getElementById('sl-fin').value=t.financeiro;
+      document.getElementById('sl-urg').value=t.urgencia;
+      document.getElementById('sl-cog').value=t.cognitivo;
+      document.getElementById('sl-dep').value=t.bloqueio;
+      document.getElementById('t-obj').value=t.objId||'';
+      recurSel=t.recorrencia||'nenhuma';
+      document.querySelectorAll('.ro').forEach(e=>e.classList.toggle('active',e.dataset.val===recurSel));
+      document.getElementById('modal-task-title').textContent='Editar tarefa';
+      document.getElementById('modal-save-btn').textContent='Salvar alterações';
+      document.getElementById('btn-del-task').style.display='';
+    }
+  } else {
+    document.getElementById('t-title').value='';
+    document.getElementById('t-date').value=iso(today);
+    document.querySelectorAll('.ro').forEach(e=>e.classList.toggle('active',e.dataset.val==='nenhuma'));
+    document.getElementById('modal-task-title').textContent='Nova tarefa';
+    document.getElementById('modal-save-btn').textContent='Salvar tarefa';
+    document.getElementById('btn-del-task').style.display='none';
+  }
+  updScore();
+  document.getElementById('modal-task').classList.add('open');
+}
+
+function closeTaskModal(){ document.getElementById('modal-task').classList.remove('open'); editTaskId=null; }
+
+function saveTask(){
+  const title=document.getElementById('t-title').value.trim();
+  if(!title){ alert('Informe o título da tarefa.'); return; }
+  const wasEditing=!!editTaskId;
+  const old=wasEditing?state.tasks.find(x=>x.id==editTaskId):null;
+  const t={
+    id: editTaskId||Date.now(), title,
+    nichoId: document.getElementById('t-nicho').value,
+    date: document.getElementById('t-date').value||iso(today),
+    duracao: +document.getElementById('t-dur').value,
+    financeiro: +document.getElementById('sl-fin').value,
+    urgencia: +document.getElementById('sl-urg').value,
+    cognitivo: +document.getElementById('sl-cog').value,
+    bloqueio: +document.getElementById('sl-dep').value,
+    recorrencia: recurSel,
+    objId: document.getElementById('t-obj').value?+document.getElementById('t-obj').value:null,
+    done: old?!!old.done:false,
+    doneDates: old?.doneDates||{},
+  };
+  t.score=calcScore(t);
+  if(wasEditing){ const i=state.tasks.findIndex(x=>x.id==editTaskId); if(i>=0) state.tasks[i]=t; }
+  else state.tasks.push(t);
+  closeTaskModal(); toast(wasEditing?'Tarefa atualizada':'Tarefa criada'); renderAll(); scheduleSave();
+}
+
+function deleteTask(){
+  if(!editTaskId) return;
+  if(!confirm('Excluir esta tarefa?')) return;
+  state.tasks=state.tasks.filter(t=>t.id!=editTaskId);
+  closeTaskModal(); toast('Tarefa excluída'); renderAll(); scheduleSave();
+}
+
+// ════════════════════════════
+// MODAL: OBJECTIVE
+// ════════════════════════════
+function openObjModal(id){
+  editObjId=id||null;
+  renderSidebarNichos();
+  if(id){
+    const o=state.objectives.find(o=>o.id==id);
+    if(o){
+      document.getElementById('o-title').value=o.title;
+      document.getElementById('o-nicho').value=o.nichoId;
+      document.getElementById('o-deadline').value=o.deadline||'';
+      document.getElementById('o-result').value=o.result||'';
+      document.getElementById('o-valor').value=o.valor||'';
+      document.getElementById('modal-obj-title').textContent='Editar objetivo';
+      document.getElementById('obj-save-btn').textContent='Salvar alterações';
+      document.getElementById('btn-del-obj').style.display='';
+    }
+  } else {
+    document.getElementById('o-title').value='';
+    document.getElementById('o-result').value='';
+    document.getElementById('o-valor').value='';
+    document.getElementById('modal-obj-title').textContent='Novo objetivo';
+    document.getElementById('obj-save-btn').textContent='Salvar objetivo';
+    document.getElementById('btn-del-obj').style.display='none';
+  }
+  document.getElementById('modal-obj').classList.add('open');
+}
+
+function closeObjModal(){ document.getElementById('modal-obj').classList.remove('open'); editObjId=null; }
+
+function saveObj(){
+  const title=document.getElementById('o-title').value.trim();
+  if(!title){ alert('Informe o título do objetivo.'); return; }
+  const wasEditing=!!editObjId;
+  const o={
+    id: editObjId||Date.now(), title,
+    nichoId: document.getElementById('o-nicho').value,
+    deadline: document.getElementById('o-deadline').value,
+    result: document.getElementById('o-result').value,
+    valor: document.getElementById('o-valor').value.replace(/\D/g,''),
+  };
+  if(wasEditing){ const i=state.objectives.findIndex(x=>x.id==editObjId); if(i>=0) state.objectives[i]=o; }
+  else state.objectives.push(o);
+  closeObjModal(); toast(wasEditing?'Objetivo atualizado':'Objetivo criado'); renderAll(); scheduleSave();
+}
+
+function deleteObj(){
+  if(!editObjId) return;
+  if(!confirm('Excluir este objetivo? As tarefas vinculadas continuarão existindo.')) return;
+  state.objectives=state.objectives.filter(o=>o.id!=editObjId);
+  state.tasks.forEach(t=>{ if(t.objId==editObjId) t.objId=null; });
+  closeObjModal(); toast('Objetivo excluído'); renderAll(); scheduleSave();
+}
+
+// ════════════════════════════
+// MODAL: NICHO
+// ════════════════════════════
+function buildNichoModalUI(){
+  document.getElementById('color-picker').innerHTML=COLORS.map(c=>`<div class="color-opt ${selColor===c?'active':''}" style="background:${c}" onclick="selColor='${c}';document.querySelectorAll('.color-opt').forEach(e=>e.classList.toggle('active',e.style.background==='${c}'||e.style.backgroundColor==='${c}'));updNichoPreview()"></div>`).join('');
+  document.getElementById('icon-picker').innerHTML=ICONS.map(ic=>`<div class="icon-opt ${selIcon===ic?'active':''}" onclick="selIcon='${ic}';document.querySelectorAll('.icon-opt').forEach(e=>e.classList.toggle('active',e.textContent==='${ic}'));updNichoPreview()">${ic}</div>`).join('');
+  updNichoPreview();
+}
+
+function updNichoPreview(){
+  const name=document.getElementById('n-name').value||'Meu nicho';
+  const p=document.getElementById('nicho-preview');
+  p.style.background=selColor;
+  p.innerHTML=`<span style="font-size:20px">${selIcon}</span><span>${name}</span>`;
+}
+
+function openNichoModal(id){
+  editNichoId=id||null;
+  if(id){
+    const n=getNicho(id);
+    selColor=n.color; selIcon=n.icon;
+    document.getElementById('n-name').value=n.name;
+    document.getElementById('n-desc').value=n.desc||'';
+    document.getElementById('modal-nicho-title').textContent='Editar nicho';
+    document.getElementById('nicho-save-btn').textContent='Salvar alterações';
+    document.getElementById('btn-del-nicho').style.display=id&&!['escola','invest','saude','pessoal'].includes(id)?'':'none';
+  } else {
+    selColor=COLORS[0]; selIcon=ICONS[0];
+    document.getElementById('n-name').value='';
+    document.getElementById('n-desc').value='';
+    document.getElementById('modal-nicho-title').textContent='Novo nicho';
+    document.getElementById('nicho-save-btn').textContent='Criar nicho';
+    document.getElementById('btn-del-nicho').style.display='none';
+  }
+  buildNichoModalUI();
+  document.getElementById('modal-nicho').classList.add('open');
+}
+
+function closeNichoModal(){ document.getElementById('modal-nicho').classList.remove('open'); editNichoId=null; }
+
+function saveNicho(){
+  const name=document.getElementById('n-name').value.trim();
+  if(!name){ alert('Informe o nome do nicho.'); return; }
+  const wasEditing=!!editNichoId;
+  const n={ id: editNichoId||name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,''), name, icon:selIcon, color:selColor, desc:document.getElementById('n-desc').value };
+  if(wasEditing){ const i=state.nichos.findIndex(x=>x.id===editNichoId); if(i>=0) state.nichos[i]=n; }
+  else state.nichos.push(n);
+  closeNichoModal(); toast(wasEditing?'Nicho atualizado':'Nicho criado'); renderSidebarNichos(); renderAll(); scheduleSave();
+}
+
+function deleteNicho(){
+  if(!editNichoId) return;
+  if(['escola','invest','saude','pessoal'].includes(editNichoId)){ alert('Nichos padrão não podem ser excluídos.'); return; }
+  if(!confirm('Excluir este nicho? Tarefas vinculadas permanecerão.')) return;
+  state.nichos=state.nichos.filter(n=>n.id!==editNichoId);
+  closeNichoModal(); toast('Nicho excluído'); renderSidebarNichos(); renderAll(); scheduleSave();
+}
+
+// ════════════════════════════
+// MOBILE
+// ════════════════════════════
+function toggleSidebar(){
+  const sb=document.getElementById('sidebar'), ov=document.getElementById('mob-overlay');
+  const open=sb.classList.toggle('open');
+  ov.classList.toggle('open',open);
+}
+function closeSidebar(){
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('mob-overlay').classList.remove('open');
+}
+
+
+// ════════════════════════════
+// TOAST
+// ════════════════════════════
+let toastT;
+function toast(msg){
+  const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show');
+  clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show'),2400);
+}
+
+// ════════════════════════════
+// RENDER ALL
+// ════════════════════════════
+function renderAll(){
+  renderToday(); renderAllTasks(); renderObjectives(); renderMonth(); renderWeek(); renderYear();
+  document.getElementById('sb-task-cnt').textContent=state.tasks.length;
+  document.getElementById('sb-obj-cnt').textContent=state.objectives.length;
+}
+
+// ════════════════════════════
+// INIT
+// ════════════════════════════
+async function initApp(){
+  window.addEventListener('error',ev=>{
+    console.error('Erro global capturado', ev.error||ev.message);
+    setSyncStatus('Erro no app — veja console', String(ev.error?.stack||ev.error||ev.message||'Erro global'), 'err');
+  });
+  window.addEventListener('unhandledrejection',ev=>{
+    console.error('Promise rejeitada', ev.reason);
+    setSyncStatus('Erro de conexão — app local', String(ev.reason?.stack||ev.reason||'Promise rejeitada'), 'err');
+  });
+
+  document.getElementById('tb-date').textContent=fmtFull(today);
+  document.getElementById('n-name').addEventListener('input',updNichoPreview);
+
+  // Renderização imediata: evita tela branca no Vercel mesmo se Firebase/CDN/Firestore falhar.
+  state=normalizeState(state);
+  renderSidebarNichos();
+  renderAll();
+
+  const ok=await initFirebase();
+  if(ok){
+    await loadRemoteState();
+    renderSidebarNichos();
+    renderAll();
+  }
+}
+
+initApp();
+</script>
+</body>
+</html>
