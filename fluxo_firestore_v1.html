@@ -613,8 +613,6 @@ textarea.fi2{resize:vertical}
 </div>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 <script>
 // ════════════════════════════
 // STATE
@@ -637,7 +635,7 @@ const FIRESTORE_DOC_ID = 'principal';
 let firebaseApp = null;
 let db = null;
 let firebaseReady = false;
-let remoteLoading = true;
+let remoteLoading = false;
 let saveTimer = null;
 let lastSaveAt = null;
 
@@ -721,17 +719,42 @@ function setSyncStatus(txt){
   if(el) el.textContent=txt;
 }
 
-function initFirebase(){
+function loadScript(src, timeoutMs=8000){
+  return new Promise((resolve,reject)=>{
+    if(document.querySelector(`script[src="${src}"]`)){ resolve(); return; }
+    const s=document.createElement('script');
+    let done=false;
+    const timer=setTimeout(()=>{
+      if(done) return;
+      done=true;
+      s.remove();
+      reject(new Error('Timeout carregando '+src));
+    },timeoutMs);
+    s.src=src;
+    s.async=true;
+    s.onload=()=>{ if(done) return; done=true; clearTimeout(timer); resolve(); };
+    s.onerror=()=>{ if(done) return; done=true; clearTimeout(timer); reject(new Error('Falha carregando '+src)); };
+    document.head.appendChild(s);
+  });
+}
+
+async function initFirebase(){
   try{
+    setSyncStatus('Firebase: carregando SDK…');
+    await loadScript('https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js');
+    await loadScript('https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js');
     if(!window.firebase) throw new Error('SDK Firebase não carregou');
     firebaseApp = firebase.apps.length ? firebase.app() : firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
     firebaseReady = true;
     setSyncStatus('Firebase: conectando…');
+    return true;
   }catch(e){
     console.error('Erro ao iniciar Firebase', e);
     firebaseReady = false;
-    setSyncStatus('Firebase: offline');
+    db = null;
+    setSyncStatus('Firebase: offline — app local');
+    return false;
   }
 }
 
@@ -751,37 +774,45 @@ function normalizeState(raw){
   return clean;
 }
 
+function withTimeout(promise, ms, label){
+  let timer;
+  const timeout=new Promise((_,reject)=>{
+    timer=setTimeout(()=>reject(new Error(label||'Operação expirou')),ms);
+  });
+  return Promise.race([promise,timeout]).finally(()=>clearTimeout(timer));
+}
+
 async function loadRemoteState(){
   remoteLoading=true;
   if(!firebaseReady||!db){
-    state=baseState();
     remoteLoading=false;
-    setSyncStatus('Firebase: offline');
-    toast('Firebase indisponível. Dados não serão salvos.');
-    return;
+    setSyncStatus('Firebase: offline — app local');
+    return false;
   }
   try{
     const ref=db.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_DOC_ID);
-    const snap=await ref.get();
+    const snap=await withTimeout(ref.get(),10000,'Firestore demorou para responder');
     if(snap.exists){
       const data=snap.data()||{};
       state=normalizeState(data.state||data);
       setSyncStatus('Firebase: sincronizado');
     }else{
-      state=baseState();
-      await ref.set({
-        state,
+      const initial=normalizeState(state);
+      await withTimeout(ref.set({
+        state:initial,
         version:'fluxo-v1-firestore',
         createdAt:firebase.firestore.FieldValue.serverTimestamp(),
         updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
-      });
+      }),10000,'Firestore demorou para criar base');
+      state=initial;
       setSyncStatus('Firebase: base criada');
     }
+    return true;
   }catch(e){
     console.error('Erro ao carregar Firestore', e);
-    state=baseState();
-    setSyncStatus('Firebase: erro nas regras');
-    toast('Não consegui ler o Firestore. Verifique as regras do banco.');
+    setSyncStatus('Firebase: erro — app local');
+    toast('Firestore não respondeu. O app abriu em modo local.');
+    return false;
   }finally{
     remoteLoading=false;
   }
@@ -1455,12 +1486,29 @@ function renderAll(){
 // INIT
 // ════════════════════════════
 async function initApp(){
+  window.addEventListener('error',ev=>{
+    console.error('Erro global capturado', ev.error||ev.message);
+    setSyncStatus('Erro no app — veja console');
+  });
+  window.addEventListener('unhandledrejection',ev=>{
+    console.error('Promise rejeitada', ev.reason);
+    setSyncStatus('Erro de conexão — app local');
+  });
+
   document.getElementById('tb-date').textContent=fmtFull(today);
   document.getElementById('n-name').addEventListener('input',updNichoPreview);
-  initFirebase();
-  await loadRemoteState();
+
+  // Renderização imediata: evita tela branca no Vercel mesmo se Firebase/CDN/Firestore falhar.
+  state=normalizeState(state);
   renderSidebarNichos();
   renderAll();
+
+  const ok=await initFirebase();
+  if(ok){
+    await loadRemoteState();
+    renderSidebarNichos();
+    renderAll();
+  }
 }
 
 initApp();
