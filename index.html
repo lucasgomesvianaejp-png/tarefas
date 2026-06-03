@@ -8,7 +8,7 @@ HISTÓRICO IA
 [v5] Alterado por IA – removido Assistente/IA externa; mantido cálculo local de prioridade, sem API de IA.
 [v6] Alterado por IA – removida a caixa lateral de análise de prioridade; tela Hoje agora fica focada somente na fila e nos indicadores.
 [v7] Alterado por IA – correções de usabilidade: prioridade recalibrada, edição por clique no card, conclusão visual, navegação por dia nos calendários e remoção definitiva de qualquer painel lateral.
-[v8] Correção pendências antigas: botão Hoje re-renderiza a fila e carrega atrasadas corretamente.
+[v8] Correção definitiva de pendências: fila Hoje agora monta a lista por fonte única, normalizando data/status antes de renderizar.
 [v7] Pendente – autenticação por usuário e separar dados por conta.
 -->
 <html lang="pt-BR">
@@ -649,21 +649,71 @@ function parseISODate(s){
 function normalizeDateString(value){
   if(!value) return '';
   if(value instanceof Date) return iso(value);
+  if(value && typeof value.toDate === 'function') return iso(value.toDate());
+  if(value && typeof value === 'object' && typeof value.seconds === 'number') return iso(new Date(value.seconds*1000));
+  if(value && typeof value === 'object' && typeof value._seconds === 'number') return iso(new Date(value._seconds*1000));
+
   const str = String(value).trim();
-  const isoMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(!str) return '';
+
+  // yyyy-mm-dd ou yyyy/mm/dd, mesmo se vier com horário depois.
+  const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
   if(isoMatch){
     const y=isoMatch[1], m=String(isoMatch[2]).padStart(2,'0'), d=String(isoMatch[3]).padStart(2,'0');
     return `${y}-${m}-${d}`;
   }
+
+  // dd/mm/yyyy
   const brMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if(brMatch){
     const d=String(brMatch[1]).padStart(2,'0'), m=String(brMatch[2]).padStart(2,'0'), y=brMatch[3];
     return `${y}-${m}-${d}`;
   }
+
   const parsed = new Date(str);
   if(!Number.isNaN(parsed.getTime())) return iso(parsed);
   return '';
 }
+
+function todayIso(){ return iso(new Date()); }
+
+function normalizeRecurrence(value){
+  const s=String(value||'nenhuma').trim().toLowerCase();
+  if(!s || ['nenhuma','unica','única','single','none','avulsa','avulso'].includes(s)) return 'nenhuma';
+  if(['diaria','diária','daily','dia'].includes(s)) return 'diaria';
+  if(['semanal','weekly','semana'].includes(s)) return 'semanal';
+  if(['quinzenal','quinzena','biweekly'].includes(s)) return 'quinzenal';
+  if(['mensal','monthly','mes','mês'].includes(s)) return 'mensal';
+  return s;
+}
+
+function coerceDone(value){
+  if(value===true || value===1) return true;
+  if(value===false || value===0 || value==null) return false;
+  const s=String(value).trim().toLowerCase();
+  return ['true','1','sim','s','yes','y','done','concluida','concluída','concluido','concluído','finalizada','finalizado','ok'].includes(s);
+}
+
+function taskDate(t){
+  // Fonte única da data da tarefa. Aceita nomes antigos por segurança.
+  return normalizeDateString(t?.date || t?.data || t?.dueDate || t?.deadline || t?.startDate || t?.inicio || t?.vd);
+}
+
+function isRecurringTask(t){
+  return normalizeRecurrence(t?.recorrencia || t?.recurrence || t?.tipoRecorrencia) !== 'nenhuma';
+}
+
+function isTaskDone(t, day=null){
+  if(!t) return false;
+  const rec = normalizeRecurrence(t.recorrencia || t.recurrence || t.tipoRecorrencia);
+  if(rec !== 'nenhuma'){
+    const d = normalizeDateString(day || t.vd || taskDate(t));
+    return !!(d && t.doneDates && coerceDone(t.doneDates[d]));
+  }
+  const status=String(t.status || t.situacao || '').trim().toLowerCase();
+  return coerceDone(t.done) || coerceDone(t.completed) || coerceDone(t.concluida) || coerceDone(t.concluída) || ['done','concluida','concluída','concluido','concluído','finalizada','finalizado'].includes(status);
+}
+
 function addDays(d,n){ const r=parseISODate(d);r.setDate(r.getDate()+n);return r }
 function fmtFull(d){ return d.toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) }
 function fmtShort(d){ return d.toLocaleDateString('pt-BR',{day:'numeric',month:'short'}) }
@@ -690,50 +740,60 @@ function priDesc(s){
 }
 
 function expandTask(t,from,to){
-  if(!t.recorrencia||t.recorrencia==='nenhuma') return t.date>=from&&t.date<=to?[{...t,vd:t.date,done:!!t.done}]:[];
-  const base=parseISODate(t.date||iso(today)), end=parseISODate(to), r=[], step={diaria:1,semanal:7,quinzenal:14,mensal:30}[t.recorrencia]||1;
+  const td = taskDate(t);
+  const rec = normalizeRecurrence(t.recorrencia || t.recurrence || t.tipoRecorrencia);
+  if(rec==='nenhuma'){
+    return td>=from&&td<=to?[{...t,date:td,vd:td,recorrencia:'nenhuma',done:isTaskDone(t)}]:[];
+  }
+  const base=parseISODate(td||todayIso()), end=parseISODate(to), r=[], step={diaria:1,semanal:7,quinzenal:14,mensal:30}[rec]||1;
   let cur=new Date(base);
   while(cur<=end){
     const curIso=iso(cur);
-    if(curIso>=from) r.push({...t,vd:curIso,id:t.id+'_'+curIso,done:!!(t.doneDates&&t.doneDates[curIso])});
-    if(t.recorrencia==='mensal'){ cur.setMonth(cur.getMonth()+1) }
+    if(curIso>=from) r.push({...t,vd:curIso,id:t.id+'_'+curIso,recorrencia:rec,done:isTaskDone(t,curIso)});
+    if(rec==='mensal'){ cur.setMonth(cur.getMonth()+1) }
     else{ cur=addDays(cur,step) }
     if(r.length>400)break;
   }
   return r;
 }
+
 function getScheduledForDate(d){
-  return state.tasks.flatMap(t=>expandTask(t,d,d));
+  const day=normalizeDateString(d) || todayIso();
+  return state.tasks.flatMap(t=>expandTask(t,day,day));
 }
+
 function getOverdueForDate(d){
-  const day=iso(parseISODate(d));
-  const todayIso=iso(today);
-  // Pendências antigas entram na fila do dia atual/futuro até serem concluídas.
-  // Regra: toda tarefa única com data anterior ao dia visualizado e ainda não concluída
-  // aparece carregada como pendência. Isso vale especialmente ao voltar para "Hoje".
-  // O calendário mensal/anual continua chamando getForDate(...,{includeOverdue:false})
-  // para não poluir os dias com atrasos repetidos.
-  if(day<todayIso) return [];
+  const day=normalizeDateString(d) || todayIso();
+
+  // Decisão do sistema: atrasadas aparecem SOMENTE na fila de Hoje.
+  // Calendário continua mostrando a tarefa no dia original, sem replicar atraso no mês inteiro.
+  if(day !== todayIso()) return [];
+
   return state.tasks
     .filter(t=>{
-      const rec = t.recorrencia || 'nenhuma';
-      const taskDay = normalizeDateString(t.date);
-      return rec==='nenhuma' && !t.done && !!taskDay && taskDay < day;
+      const rec = normalizeRecurrence(t.recorrencia || t.recurrence || t.tipoRecorrencia);
+      const taskDay = taskDate(t);
+      return rec==='nenhuma' && !isTaskDone(t) && !!taskDay && taskDay < day;
     })
-    .map(t=>({...t,vd:day,originalDate:normalizeDateString(t.date),carriedOver:true,done:false}));
+    .map(t=>({...t,date:taskDate(t),vd:day,originalDate:taskDate(t),recorrencia:'nenhuma',carriedOver:true,done:false}));
 }
-function getForDate(d, opts={}){
-  const day=iso(parseISODate(d));
-  const scheduled=getScheduledForDate(day);
-  const overdue=opts.includeOverdue===false?[]:getOverdueForDate(day);
+
+function dedupeTasks(list){
   const seen=new Set();
-  return [...overdue, ...scheduled]
-    .filter(t=>{
-      const key=String(t.id);
-      if(seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
+  return list.filter(t=>{
+    // Para tarefa carregada/atrasada, usa o id base; para recorrência, mantém id com data.
+    const key=String(t.carriedOver ? t.id : t.id);
+    if(seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getForDate(d, opts={}){
+  const day=normalizeDateString(d) || todayIso();
+  const overdue=opts.includeOverdue===false?[]:getOverdueForDate(day);
+  const scheduled=getScheduledForDate(day);
+  return dedupeTasks([...overdue, ...scheduled])
     .sort((a,b)=>{
       if(!!a.carriedOver!==!!b.carriedOver) return a.carriedOver?-1:1;
       return (b.score||0)-(a.score||0);
@@ -825,12 +885,21 @@ function normalizeState(raw){
     objectives: Array.isArray(raw?.objectives)?raw.objectives:[],
     tasks: Array.isArray(raw?.tasks)?raw.tasks:[],
   };
-  clean.tasks=clean.tasks.map(t=>({
-    ...t,
-    done: !!t.done,
-    doneDates: t.doneDates||{},
-    score: calcScore(t),
-  }));
+  clean.tasks=clean.tasks.map((t,idx)=>{
+    const rec = normalizeRecurrence(t.recorrencia || t.recurrence || t.tipoRecorrencia);
+    const td = taskDate(t) || todayIso();
+    const id = t.id ?? t._id ?? t.uid ?? (Date.now()+idx);
+    const normalized={
+      ...t,
+      id,
+      date: td,
+      recorrencia: rec,
+      doneDates: (t.doneDates && typeof t.doneDates==='object') ? t.doneDates : {},
+    };
+    normalized.done = isTaskDone(normalized);
+    normalized.score = calcScore(normalized);
+    return normalized;
+  });
   return clean;
 }
 
@@ -1003,7 +1072,7 @@ function renderList(list,cid,ranked=false){
 // ════════════════════════════
 function renderToday(){
   const d=iso(selectedDate);
-  const isSelectedToday=d===iso(today);
+  const isSelectedToday=d===todayIso();
   document.getElementById('tb-title').textContent=isSelectedToday?'Hoje':'Dia selecionado';
   document.getElementById('tb-date').textContent=fmtFull(selectedDate);
   let list=getForDate(d);
@@ -1177,7 +1246,7 @@ function renderMonth(){
   for(let i=first-1;i>=0;i--) html+=`<div class="cal-day other-m"><div class="cal-dn">${pd-i}</div></div>`;
   for(let d=1;d<=dim;d++){
     const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const isT=ds===iso(today), isSel=ds===iso(selectedDate);
+    const isT=ds===todayIso(), isSel=ds===iso(selectedDate);
     const dt=getForDate(ds,{includeOverdue:false}).sort((a,b)=>b.score-a.score);
     html+=`<div class="cal-day ${isT?'today':''} ${isSel?'selected':''}" onclick="openDay('${ds}')" title="Abrir ${d}/${m+1}/${y}">
       <div class="cal-dn">${isT?`<div class="cal-dn-inner">${d}</div>`:d}</div>
@@ -1197,7 +1266,7 @@ function renderWeek(){
   document.getElementById('wk-lbl').textContent=fmtShort(days[0])+' – '+fmtShort(days[6]);
   const wd=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
   let hdr='<div class="whc" style="background:var(--sf2)"></div>';
-  days.forEach((d,i)=>{const ds=iso(d), isT=ds===iso(today), isSel=ds===iso(selectedDate);hdr+=`<div class="whc ${isT?'today':''} ${isSel?'today':''}" onclick="openDay('${ds}')" style="cursor:pointer"><div class="wd">${wd[i]}</div><div class="wn">${d.getDate()}</div></div>`;});
+  days.forEach((d,i)=>{const ds=iso(d), isT=ds===todayIso(), isSel=ds===iso(selectedDate);hdr+=`<div class="whc ${isT?'today':''} ${isSel?'today':''}" onclick="openDay('${ds}')" style="cursor:pointer"><div class="wd">${wd[i]}</div><div class="wn">${d.getDate()}</div></div>`;});
   document.getElementById('wk-hdr').innerHTML=hdr;
   const hours=[7,8,9,10,11,12,13,14,15,16,17,18];
   let body='<div class="wtime-col">'+hours.map(h=>`<div class="wts">${h}:00</div>`).join('')+'</div>';
@@ -1222,7 +1291,7 @@ function renderYear(){
     for(let i=0;i<sd;i++) cells+='<div></div>';
     for(let d=1;d<=dim;d++){
       const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-      const isT=ds===iso(today), isSel=ds===iso(selectedDate), has=tmap[d]>0;
+      const isT=ds===todayIso(), isSel=ds===iso(selectedDate), has=tmap[d]>0;
       cells+=`<div class="ym-d ${isT?'today':has?'has':''} ${isSel?'selected':''}" onclick="openDay('${ds}')" title="Abrir ${d}/${m+1}/${y}">${d}</div>`;
     }
     html+=`<div class="ym-card"><div class="ym-hdr">${MN[m]}${tot?`<span>${tot}</span>`:''}</div><div class="ym-mini">${cells}</div></div>`;
@@ -1538,6 +1607,26 @@ function renderAll(){
   document.getElementById('sb-task-cnt').textContent=state.tasks.length;
   document.getElementById('sb-obj-cnt').textContent=state.objectives.length;
 }
+
+// Helper de diagnóstico: no console, use fluxoDebugPendencias() para ver atrasadas.
+window.fluxoDebugPendencias = function(ds){
+  const day = ds ? normalizeDateString(ds) : todayIso();
+  const todas = state.tasks.map(t=>({
+    id:t.id,
+    titulo:t.title,
+    data:taskDate(t),
+    recorrencia:normalizeRecurrence(t.recorrencia || t.recurrence || t.tipoRecorrencia),
+    done:isTaskDone(t),
+    deveriaEntrar: normalizeRecurrence(t.recorrencia || t.recurrence || t.tipoRecorrencia)==='nenhuma' && !isTaskDone(t) && taskDate(t) && taskDate(t)<day && day===todayIso()
+  }));
+  const atrasadas = getOverdueForDate(day).map(t=>({id:t.id,titulo:t.title,data:t.originalDate,done:t.done}));
+  console.log('Dia analisado:', day, 'Hoje:', todayIso());
+  console.log('Todas as tarefas normalizadas:');
+  console.table(todas);
+  console.log('Atrasadas que entram na fila de Hoje:');
+  console.table(atrasadas);
+  return {dia:day, hoje:todayIso(), todas, atrasadas};
+};
 
 // ════════════════════════════
 // INIT
