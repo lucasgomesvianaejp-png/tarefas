@@ -8,6 +8,7 @@ HISTÓRICO IA
 [v5] Alterado por IA – removido Assistente/IA externa; mantido cálculo local de prioridade, sem API de IA.
 [v6] Alterado por IA – removida a caixa lateral de análise de prioridade; tela Hoje agora fica focada somente na fila e nos indicadores.
 [v7] Alterado por IA – correções de usabilidade: prioridade recalibrada, edição por clique no card, conclusão visual, navegação por dia nos calendários e remoção definitiva de qualquer painel lateral.
+[v8] Correção pendências antigas: botão Hoje re-renderiza a fila e carrega atrasadas corretamente.
 [v7] Pendente – autenticação por usuário e separar dados por conta.
 -->
 <html lang="pt-BR">
@@ -690,12 +691,18 @@ function getOverdueForDate(d){
   const day=iso(parseISODate(d));
   const todayIso=iso(today);
   // Pendências antigas entram na fila do dia atual/futuro até serem concluídas.
-  // Mantemos o calendário limpo: a tarefa continua cadastrada na data original,
-  // mas aparece em Hoje como pendente carregada.
+  // Regra: toda tarefa única com data anterior ao dia visualizado e ainda não concluída
+  // aparece carregada como pendência. Isso vale especialmente ao voltar para "Hoje".
+  // O calendário mensal/anual continua chamando getForDate(...,{includeOverdue:false})
+  // para não poluir os dias com atrasos repetidos.
   if(day<todayIso) return [];
   return state.tasks
-    .filter(t=>(!t.recorrencia||t.recorrencia==='nenhuma') && !t.done && t.date && t.date<day)
-    .map(t=>({...t,vd:day,originalDate:t.date,carriedOver:true,done:false}));
+    .filter(t=>{
+      const rec = t.recorrencia || 'nenhuma';
+      const taskDay = normalizeDateString(t.date);
+      return rec==='nenhuma' && !t.done && !!taskDay && taskDay < day;
+    })
+    .map(t=>({...t,vd:day,originalDate:normalizeDateString(t.date),carriedOver:true,done:false}));
 }
 function getForDate(d, opts={}){
   const day=iso(parseISODate(d));
@@ -1239,6 +1246,7 @@ function setTodayTab(tab,el){
 }
 
 function setView(v, sbEl, keepSelected=false){
+  const wasDate=iso(selectedDate);
   if(v==='hoje'&&!keepSelected) selectedDate=new Date(today);
   curView=v;
   document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));
@@ -1249,6 +1257,11 @@ function setView(v, sbEl, keepSelected=false){
   const T={hoje:(iso(selectedDate)===iso(today)?'Hoje':'Dia selecionado'),semana:'Semana',mes:'Mês',ano:'Ano',objetivos:'Objetivos',tarefas:'Tarefas','nicho-profile':getNicho(profileNichoId)?.name||'Nicho'};
   document.getElementById('tb-title').textContent=T[v]||v;
   document.getElementById('tb-date').textContent=(v==='hoje')?fmtFull(selectedDate):fmtFull(today);
+  // Importante: quando o usuário clica em "Hoje", a data selecionada pode mudar
+  // de um dia antigo para hoje. Sem renderizar novamente, as pendências antigas
+  // ficam escondidas até um reload/renderAll.
+  if(v==='hoje' && wasDate!==iso(selectedDate)) renderToday();
+  else if(v==='hoje') renderToday();
   closeSidebar();
 }
 
@@ -1339,7 +1352,7 @@ function saveTask(){
   const t={
     id: editTaskId||Date.now(), title,
     nichoId: document.getElementById('t-nicho').value,
-    date: document.getElementById('t-date').value||iso(today),
+    date: normalizeDateString(document.getElementById('t-date').value)||iso(today),
     duracao: +document.getElementById('t-dur').value,
     financeiro: +document.getElementById('sl-fin').value,
     urgencia: +document.getElementById('sl-urg').value,
