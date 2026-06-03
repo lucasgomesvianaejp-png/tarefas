@@ -8,7 +8,7 @@ HISTÓRICO IA
 [v5] Alterado por IA – removido Assistente/IA externa; mantido cálculo local de prioridade, sem API de IA.
 [v6] Alterado por IA – removida a caixa lateral de análise de prioridade; tela Hoje agora fica focada somente na fila e nos indicadores.
 [v7] Alterado por IA – correções de usabilidade: prioridade recalibrada, edição por clique no card, conclusão visual, navegação por dia nos calendários e remoção definitiva de qualquer painel lateral.
-[v8] Correção definitiva de pendências: fila Hoje agora monta a lista por fonte única, normalizando data/status antes de renderizar.
+[v9] Correção robusta de pendências: fila Hoje reconstruída por data <= hoje, sem depender de remendos ou filtro antigo.
 [v7] Pendente – autenticação por usuário e separar dados por conta.
 -->
 <html lang="pt-BR">
@@ -20,7 +20,7 @@ HISTÓRICO IA
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Fluxo">
-<title>Fluxo — Planejador</title>
+<title>Fluxo — Planejador v9</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
 <style>
@@ -762,27 +762,81 @@ function getScheduledForDate(d){
   return state.tasks.flatMap(t=>expandTask(t,day,day));
 }
 
+function normalizeTaskForQueue(t){
+  const rec = normalizeRecurrence(t?.recorrencia || t?.recurrence || t?.tipoRecorrencia);
+  const td = taskDate(t);
+  return {
+    ...t,
+    date: td || todayIso(),
+    vd: td || todayIso(),
+    recorrencia: rec,
+    doneDates: (t?.doneDates && typeof t.doneDates==='object') ? t.doneDates : {},
+    done: isTaskDone(t),
+    score: calcScore(t || {})
+  };
+}
+
 function getOverdueForDate(d){
   const day=normalizeDateString(d) || todayIso();
-
-  // Decisão do sistema: atrasadas aparecem SOMENTE na fila de Hoje.
-  // Calendário continua mostrando a tarefa no dia original, sem replicar atraso no mês inteiro.
   if(day !== todayIso()) return [];
 
   return state.tasks
+    .map(normalizeTaskForQueue)
     .filter(t=>{
-      const rec = normalizeRecurrence(t.recorrencia || t.recurrence || t.tipoRecorrencia);
-      const taskDay = taskDate(t);
-      return rec==='nenhuma' && !isTaskDone(t) && !!taskDay && taskDay < day;
+      const td = taskDate(t);
+      return t.recorrencia==='nenhuma' && !!td && td < day && !isTaskDone(t);
     })
-    .map(t=>({...t,date:taskDate(t),vd:day,originalDate:taskDate(t),recorrencia:'nenhuma',carriedOver:true,done:false}));
+    .map(t=>({
+      ...t,
+      vd: day,
+      originalDate: taskDate(t),
+      carriedOver: true,
+      done: false
+    }));
+}
+
+function getTodayQueue(){
+  const day=todayIso();
+  const list=[];
+
+  state.tasks.forEach(raw=>{
+    const t=normalizeTaskForQueue(raw);
+    const td=taskDate(t);
+    if(!td) return;
+
+    if(t.recorrencia==='nenhuma'){
+      // Regra principal: tarefa única com data até hoje fica na fila de hoje
+      // até ser marcada como concluída. Isso inclui tarefas de ontem/anteontem.
+      if(td <= day && !isTaskDone(t)){
+        list.push({
+          ...t,
+          vd: day,
+          originalDate: td,
+          carriedOver: td < day,
+          done:false
+        });
+      }else if(td === day && isTaskDone(t)){
+        list.push({...t, vd:day, originalDate:td, carriedOver:false, done:true});
+      }
+      return;
+    }
+
+    // Recorrentes: entram apenas quando têm ocorrência no dia de hoje.
+    expandTask(t, day, day).forEach(occ=>list.push(occ));
+  });
+
+  return dedupeTasks(list).sort((a,b)=>{
+    if(!!a.carriedOver!==!!b.carriedOver) return a.carriedOver?-1:1;
+    if(!!a.done!==!!b.done) return a.done?1:-1;
+    return (b.score||0)-(a.score||0);
+  });
 }
 
 function dedupeTasks(list){
   const seen=new Set();
   return list.filter(t=>{
-    // Para tarefa carregada/atrasada, usa o id base; para recorrência, mantém id com data.
-    const key=String(t.carriedOver ? t.id : t.id);
+    const isRec = normalizeRecurrence(t.recorrencia || t.recurrence || t.tipoRecorrencia) !== 'nenhuma';
+    const key = isRec ? String(t.id) : String(t.id).split('_')[0];
     if(seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -791,11 +845,11 @@ function dedupeTasks(list){
 
 function getForDate(d, opts={}){
   const day=normalizeDateString(d) || todayIso();
-  const overdue=opts.includeOverdue===false?[]:getOverdueForDate(day);
-  const scheduled=getScheduledForDate(day);
-  return dedupeTasks([...overdue, ...scheduled])
+  if(day===todayIso() && opts.includeOverdue!==false) return getTodayQueue();
+
+  return dedupeTasks(getScheduledForDate(day))
     .sort((a,b)=>{
-      if(!!a.carriedOver!==!!b.carriedOver) return a.carriedOver?-1:1;
+      if(!!a.done!==!!b.done) return a.done?1:-1;
       return (b.score||0)-(a.score||0);
     });
 }
@@ -1332,23 +1386,27 @@ function setTodayTab(tab,el){
   renderToday();
 }
 
+function setTodayTabProgram(tab){
+  todayTab=tab;
+  document.querySelectorAll('.tmtab').forEach(e=>e.classList.toggle('active', e.getAttribute('onclick')?.includes("'"+tab+"'") || e.textContent.trim().toLowerCase().startsWith(tab.substring(0,4))));
+}
+
 function setView(v, sbEl, keepSelected=false){
   const wasDate=iso(selectedDate);
-  if(v==='hoje'&&!keepSelected) selectedDate=new Date(today);
+  if(v==='hoje'&&!keepSelected){
+    selectedDate=new Date();
+    setTodayTabProgram('todas');
+  }
   curView=v;
   document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));
   document.querySelectorAll('.vt').forEach(e=>e.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
   const vt=document.getElementById('vt-'+v);
   if(vt) vt.classList.add('active');
-  const T={hoje:(iso(selectedDate)===iso(today)?'Hoje':'Dia selecionado'),semana:'Semana',mes:'Mês',ano:'Ano',objetivos:'Objetivos',tarefas:'Tarefas','nicho-profile':getNicho(profileNichoId)?.name||'Nicho'};
+  const T={hoje:(iso(selectedDate)===todayIso()?'Hoje':'Dia selecionado'),semana:'Semana',mes:'Mês',ano:'Ano',objetivos:'Objetivos',tarefas:'Tarefas','nicho-profile':getNicho(profileNichoId)?.name||'Nicho'};
   document.getElementById('tb-title').textContent=T[v]||v;
-  document.getElementById('tb-date').textContent=(v==='hoje')?fmtFull(selectedDate):fmtFull(today);
-  // Importante: quando o usuário clica em "Hoje", a data selecionada pode mudar
-  // de um dia antigo para hoje. Sem renderizar novamente, as pendências antigas
-  // ficam escondidas até um reload/renderAll.
-  if(v==='hoje' && wasDate!==iso(selectedDate)) renderToday();
-  else if(v==='hoje') renderToday();
+  document.getElementById('tb-date').textContent=(v==='hoje')?fmtFull(selectedDate):fmtFull(new Date());
+  if(v==='hoje') renderToday();
   closeSidebar();
 }
 
@@ -1362,7 +1420,7 @@ function openDay(ds){
 function navMonth(d){navDate.setMonth(navDate.getMonth()+d);renderMonth()}
 function navWeek(d){navDate.setDate(navDate.getDate()+d*7);renderWeek()}
 function navYear(d){navDate.setFullYear(navDate.getFullYear()+d);renderYear()}
-function goToday(){navDate=new Date(today);selectedDate=new Date(today);renderAll();setView('hoje', null, true)}
+function goToday(){navDate=new Date();selectedDate=new Date();setTodayTabProgram('todas');renderAll();setView('hoje', null, true)}
 
 // ════════════════════════════
 // MODAL: TASK
@@ -1617,15 +1675,15 @@ window.fluxoDebugPendencias = function(ds){
     data:taskDate(t),
     recorrencia:normalizeRecurrence(t.recorrencia || t.recurrence || t.tipoRecorrencia),
     done:isTaskDone(t),
-    deveriaEntrar: normalizeRecurrence(t.recorrencia || t.recurrence || t.tipoRecorrencia)==='nenhuma' && !isTaskDone(t) && taskDate(t) && taskDate(t)<day && day===todayIso()
+    entraHoje: normalizeRecurrence(t.recorrencia || t.recurrence || t.tipoRecorrencia)==='nenhuma' && !isTaskDone(t) && taskDate(t) && taskDate(t)<=todayIso()
   }));
-  const atrasadas = getOverdueForDate(day).map(t=>({id:t.id,titulo:t.title,data:t.originalDate,done:t.done}));
+  const filaHoje = getTodayQueue().map(t=>({id:t.id,titulo:t.title,data:t.originalDate||taskDate(t),pendente:!!t.carriedOver,done:t.done}));
   console.log('Dia analisado:', day, 'Hoje:', todayIso());
   console.log('Todas as tarefas normalizadas:');
   console.table(todas);
-  console.log('Atrasadas que entram na fila de Hoje:');
-  console.table(atrasadas);
-  return {dia:day, hoje:todayIso(), todas, atrasadas};
+  console.log('Fila real de hoje:');
+  console.table(filaHoje);
+  return {dia:day, hoje:todayIso(), todas, filaHoje};
 };
 
 // ════════════════════════════
