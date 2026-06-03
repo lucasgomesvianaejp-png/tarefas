@@ -683,7 +683,37 @@ function expandTask(t,from,to){
   }
   return r;
 }
-function getForDate(d){ return state.tasks.flatMap(t=>expandTask(t,d,d)).sort((a,b)=>b.score-a.score) }
+function getScheduledForDate(d){
+  return state.tasks.flatMap(t=>expandTask(t,d,d));
+}
+function getOverdueForDate(d){
+  const day=iso(parseISODate(d));
+  const todayIso=iso(today);
+  // Pendências antigas entram na fila do dia atual/futuro até serem concluídas.
+  // Mantemos o calendário limpo: a tarefa continua cadastrada na data original,
+  // mas aparece em Hoje como pendente carregada.
+  if(day<todayIso) return [];
+  return state.tasks
+    .filter(t=>(!t.recorrencia||t.recorrencia==='nenhuma') && !t.done && t.date && t.date<day)
+    .map(t=>({...t,vd:day,originalDate:t.date,carriedOver:true,done:false}));
+}
+function getForDate(d, opts={}){
+  const day=iso(parseISODate(d));
+  const scheduled=getScheduledForDate(day);
+  const overdue=opts.includeOverdue===false?[]:getOverdueForDate(day);
+  const seen=new Set();
+  return [...overdue, ...scheduled]
+    .filter(t=>{
+      const key=String(t.id);
+      if(seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a,b)=>{
+      if(!!a.carriedOver!==!!b.carriedOver) return a.carriedOver?-1:1;
+      return (b.score||0)-(a.score||0);
+    });
+}
 function getForRange(f,t){ return state.tasks.flatMap(tt=>expandTask(tt,f,t)) }
 
 // ════════════════════════════
@@ -926,6 +956,7 @@ function tcHTML(t,rank){
         <span class="badge" style="background:${lightColor(n.color)};color:${n.color}">${n.icon} ${n.name}</span>
         <span class="badge" style="background:${p.bg};color:${p.color}">${p.lbl}</span>
         ${rl?`<span class="badge" style="background:#F0F0F0;color:#666">${rl}</span>`:''}
+        ${t.carriedOver?`<span class="badge" style="background:#FFF1E6;color:#8B3E2A">Pendente desde ${new Date(t.originalDate+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}</span>`:''}
         ${t.objId?`<span class="badge" style="background:${lightColor('#2E4A3E')};color:#2E4A3E">▸ Obj</span>`:''}
         <span class="tc-time">${t.vd?new Date(t.vd+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}):''} · ~${t.duracao<1?Math.round(t.duracao*60)+'min':t.duracao+'h'}</span>
       </div>
@@ -1122,7 +1153,7 @@ function renderMonth(){
   for(let d=1;d<=dim;d++){
     const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const isT=ds===iso(today), isSel=ds===iso(selectedDate);
-    const dt=getForDate(ds).sort((a,b)=>b.score-a.score);
+    const dt=getForDate(ds,{includeOverdue:false}).sort((a,b)=>b.score-a.score);
     html+=`<div class="cal-day ${isT?'today':''} ${isSel?'selected':''}" onclick="openDay('${ds}')" title="Abrir ${d}/${m+1}/${y}">
       <div class="cal-dn">${isT?`<div class="cal-dn-inner">${d}</div>`:d}</div>
       ${dt.slice(0,2).map(t=>{const n=getNicho(t.nichoId);return`<div class="cal-pill" style="background:${lightColor(n.color)};color:${n.color}">${t.title.substring(0,17)}${t.title.length>17?'…':''}</div>`}).join('')}
@@ -1146,7 +1177,7 @@ function renderWeek(){
   const hours=[7,8,9,10,11,12,13,14,15,16,17,18];
   let body='<div class="wtime-col">'+hours.map(h=>`<div class="wts">${h}:00</div>`).join('')+'</div>';
   days.forEach(d=>{
-    const ds=iso(d), dt=getForDate(ds);
+    const ds=iso(d), dt=getForDate(ds,{includeOverdue:false});
     body+=`<div class="wdcol" onclick="openDay('${ds}')" style="cursor:pointer">${hours.map(()=>'<div class="wdslot"></div>').join('')}${dt.map((t,i)=>{const n=getNicho(t.nichoId);const top=4+i*46;return`<div class="wev" onclick="event.stopPropagation();openTaskModal('${String(t.id).split('_')[0]}')" style="top:${top}px;height:42px;background:${lightColor(n.color)};color:${n.color};border-left-color:${n.color}">${t.title.substring(0,18)}${t.title.length>18?'…':''}</div>`}).join('')}</div>`;
   });
   document.getElementById('wk-body').innerHTML=body;
